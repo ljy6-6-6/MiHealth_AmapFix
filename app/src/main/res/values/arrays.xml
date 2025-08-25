@@ -1,0 +1,7 @@
+<resources>
+    <string-array name="xposed_scope">
+        <item>com.mi.health</item>
+        <item>com.xiaomi.wearable</item>
+        <item>com.xiaomi.hm.health</item>
+    </string-array>
+</resources>
