@@ -1,4 +1,4 @@
-package io.github.amapnotifyfix;
+package io.github.mihealthamapfix;
 
 import android.service.notification.StatusBarNotification;
 
@@ -9,9 +9,9 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
-import static io.github.amapnotifyfix.HookConstants.AMAP_NAV_ID;
-import static io.github.amapnotifyfix.HookConstants.AMAP_PACKAGE;
-import static io.github.amapnotifyfix.HookConstants.TARGET_PACKAGES;
+import static io.github.mihealthamapfix.HookConstants.AMAP_NAV_ID;
+import static io.github.mihealthamapfix.HookConstants.AMAP_PACKAGE;
+import static io.github.mihealthamapfix.HookConstants.TARGET_PACKAGES;
 
 /**
  * Legacy Xposed entry (works in LSPosed too).

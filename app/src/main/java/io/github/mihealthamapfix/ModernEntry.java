@@ -1,4 +1,4 @@
-package io.github.amapnotifyfix;
+package io.github.mihealthamapfix;
 
 import android.service.notification.StatusBarNotification;
 
@@ -9,9 +9,9 @@ import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
 
-import static io.github.amapnotifyfix.HookConstants.AMAP_NAV_ID;
-import static io.github.amapnotifyfix.HookConstants.AMAP_PACKAGE;
-import static io.github.amapnotifyfix.HookConstants.TARGET_PACKAGES;
+import static io.github.mihealthamapfix.HookConstants.AMAP_NAV_ID;
+import static io.github.mihealthamapfix.HookConstants.AMAP_PACKAGE;
+import static io.github.mihealthamapfix.HookConstants.TARGET_PACKAGES;
 
 /**
  * Modern LSPosed (libxposed API 100) entry.
@@ -37,9 +37,9 @@ public class ModernEntry extends XposedModule {
             Class<?> helper = cl.loadClass("com.xiaomi.fitness.notify.util.NotificationFilterHelper");
             Method m = helper.getDeclaredMethod("isMipmapNotification", StatusBarNotification.class);
             hook(m, IsMipmapHooker.class);
-            log("MiFitnessAmapNavFix: hooked isMipmapNotification in " + pkg);
+            log("MiHealthAmapFix: hooked isMipmapNotification in " + pkg);
         } catch (Throwable t) {
-            log("MiFitnessAmapNavFix: method not found; maybe old version. " + t);
+            log("MiHealthAmapFix: method not found; maybe old version. " + t);
         }
     }
 

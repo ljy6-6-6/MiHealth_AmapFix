@@ -1,4 +1,4 @@
-package io.github.amapnotifyfix;
+package io.github.mihealthamapfix;
 
 import java.util.Arrays;
 import java.util.Collections;

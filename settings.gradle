@@ -16,5 +16,5 @@ dependencyResolutionManagement {
         maven { url = uri("https://api.xposed.info/") }
     }
 }
-rootProject.name = "MiFitnessAmapNavFix"
+rootProject.name = "MiHealthAmapFix"
 include(":app")
