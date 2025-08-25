@@ -2,10 +2,16 @@ package io.github.amapnotifyfix;
 
 import android.service.notification.StatusBarNotification;
 
+import java.util.Set;
+
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.callbacks.XC_LoadPackage;
+
+import static io.github.amapnotifyfix.HookConstants.AMAP_NAV_ID;
+import static io.github.amapnotifyfix.HookConstants.AMAP_PACKAGE;
+import static io.github.amapnotifyfix.HookConstants.TARGET_PACKAGES;
 
 /**
  * Legacy Xposed entry (works in LSPosed too).
@@ -16,9 +22,8 @@ public class LegacyInit implements IXposedHookLoadPackage {
     @Override
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         String pkg = lpparam.packageName;
-        if (!"com.xiaomi.wearable".equals(pkg)
-                && !"com.mi.health".equals(pkg)
-                && !"com.xiaomi.hm.health".equals(pkg)) {
+        Set<String> targets = TARGET_PACKAGES;
+        if (!targets.contains(pkg)) {
             return;
         }
         try {
@@ -32,8 +37,8 @@ public class LegacyInit implements IXposedHookLoadPackage {
                         protected void beforeHookedMethod(MethodHookParam param) {
                             StatusBarNotification sbn = (StatusBarNotification) param.args[0];
                             if (sbn != null
-                                    && "com.autonavi.minimap".equals(sbn.getPackageName())
-                                    && sbn.getId() == 0x4d4) {
+                                    && AMAP_PACKAGE.equals(sbn.getPackageName())
+                                    && sbn.getId() == AMAP_NAV_ID) {
                                 param.setResult(false);
                             }
                         }
