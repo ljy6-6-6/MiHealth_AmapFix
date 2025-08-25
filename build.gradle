@@ -8,3 +8,16 @@ buildscript {
 plugins {
     id 'com.android.application' version '8.5.2' apply false
 }
+
+allprojects {
+    // 统一 Java 17 编译版本
+    tasks.withType(JavaCompile).configureEach {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = "17"
+        }
+    }
+}
