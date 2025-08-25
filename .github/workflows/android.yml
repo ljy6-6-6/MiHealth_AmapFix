@@ -1,0 +1,44 @@
+name: build-apk
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Install Gradle CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gradle
+
+      - name: Fetch libxposed api (api:100) and publish to mavenLocal
+        run: |
+          mkdir -p external
+          git clone --depth=1 https://github.com/libxposed/api.git external/libxposed-api
+          gradle -p external/libxposed-api publishToMavenLocal
+
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.7
+
+      - name: Build Release APK
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiFitnessAmapNavFix-APK
+          path: app/build/outputs/apk/release/app-release.apk
