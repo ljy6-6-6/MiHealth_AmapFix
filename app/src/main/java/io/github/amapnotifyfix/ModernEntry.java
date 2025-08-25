@@ -3,10 +3,15 @@ package io.github.amapnotifyfix;
 import android.service.notification.StatusBarNotification;
 
 import java.lang.reflect.Method;
+import java.util.Set;
 
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
+
+import static io.github.amapnotifyfix.HookConstants.AMAP_NAV_ID;
+import static io.github.amapnotifyfix.HookConstants.AMAP_PACKAGE;
+import static io.github.amapnotifyfix.HookConstants.TARGET_PACKAGES;
 
 /**
  * Modern LSPosed (libxposed API 100) entry.
@@ -23,9 +28,8 @@ public class ModernEntry extends XposedModule {
     public void onPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
         String pkg = param.getPackageName();
         // 仅在小米运动健康相关包内工作
-        if (!"com.xiaomi.wearable".equals(pkg)
-                && !"com.mi.health".equals(pkg)
-                && !"com.xiaomi.hm.health".equals(pkg)) {
+        Set<String> targets = TARGET_PACKAGES;
+        if (!targets.contains(pkg)) {
             return;
         }
         try {
@@ -49,8 +53,8 @@ public class ModernEntry extends XposedModule {
                 if (args != null && args.length > 0 && args[0] instanceof StatusBarNotification) {
                     StatusBarNotification sbn = (StatusBarNotification) args[0];
                     // 仅针对高德导航这条常驻通知 (id = 0x4d4) 关闭过滤
-                    if ("com.autonavi.minimap".equals(sbn.getPackageName())
-                            && sbn.getId() == 0x4d4) {
+                    if (AMAP_PACKAGE.equals(sbn.getPackageName())
+                            && sbn.getId() == AMAP_NAV_ID) {
                         // 让 isMipmapNotification 直接返回 false，并跳过原方法
                         callback.returnAndSkip(false);
                     }
