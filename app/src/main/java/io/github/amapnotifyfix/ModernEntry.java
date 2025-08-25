@@ -11,7 +11,7 @@ import io.github.libxposed.api.XposedModuleInterface;
 /**
  * Modern LSPosed (libxposed API 100) entry.
  * Hooks NotificationFilterHelper#isMipmapNotification(StatusBarNotification)
- * and forces it to return false for Amap's navigation notification (and as a safe fallback).
+ * and forces it to return false for Amap's navigation notification only.
  */
 public class ModernEntry extends XposedModule {
 
@@ -22,6 +22,7 @@ public class ModernEntry extends XposedModule {
     @Override
     public void onPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
         String pkg = param.getPackageName();
+        // 仅在小米运动健康相关包内工作
         if (!"com.xiaomi.wearable".equals(pkg)
                 && !"com.mi.health".equals(pkg)
                 && !"com.xiaomi.hm.health".equals(pkg)) {
@@ -40,33 +41,28 @@ public class ModernEntry extends XposedModule {
 
     /** Hooker for the modern API. */
     public static class IsMipmapHooker implements XposedInterface.Hooker {
+
+        // libxposed: 在 before 回调里若要短路并返回，使用 returnAndSkip(result)
         public static void before(XposedInterface.BeforeHookCallback callback) {
             try {
                 Object[] args = callback.getArgs();
                 if (args != null && args.length > 0 && args[0] instanceof StatusBarNotification) {
                     StatusBarNotification sbn = (StatusBarNotification) args[0];
-                    String pkg = sbn.getPackageName();
-                    int id = sbn.getId();
-                    // Amap (Gaode) navigation ongoing notification id is 0x4d4
-                    if ("com.autonavi.minimap".equals(pkg) && id == 0x4d4) {
-                        callback.setResult(Boolean.FALSE);
-                        return;
+                    // 仅针对高德导航这条常驻通知 (id = 0x4d4) 关闭过滤
+                    if ("com.autonavi.minimap".equals(sbn.getPackageName())
+                            && sbn.getId() == 0x4d4) {
+                        // 让 isMipmapNotification 直接返回 false，并跳过原方法
+                        callback.returnAndSkip(false);
                     }
                 }
-                // Fallback: still make it false (avoid blocking other notifications by this filter)
-                callback.setResult(Boolean.FALSE);
             } catch (Throwable t) {
-                callback.setResult(Boolean.FALSE);
+                // 出错不强行改结果，避免误伤其它通知
             }
         }
 
+        // 这里不需要 after；如果之后想兜底再翻转，也可以在 after 判断再 setResult(false)
         public static void after(XposedInterface.AfterHookCallback callback) {
-            try {
-                // If original returned true somehow, force it to false.
-                if (!callback.isSkipped() && Boolean.TRUE.equals(callback.getResult())) {
-                    callback.setResult(Boolean.FALSE);
-                }
-            } catch (Throwable ignored) {}
+            // no-op
         }
     }
 }
