@@ -19,20 +19,29 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
-      - name: Install Gradle CLI
+      # 不要再 apt 装 gradle！apt 版本太老
+      - name: Bootstrap Gradle 8.7 and generate wrapper
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gradle
+          GRADLE_VERSION=8.7
+          wget -q https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
+          unzip -q gradle-${GRADLE_VERSION}-bin.zip -d $HOME/gradle
+          echo "$HOME/gradle/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
+          gradle --version
+          gradle wrapper --gradle-version ${GRADLE_VERSION}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
 
       - name: Fetch libxposed api (api:100) and publish to mavenLocal
         run: |
           mkdir -p external
           git clone --depth=1 https://github.com/libxposed/api.git external/libxposed-api
-          gradle -p external/libxposed-api publishToMavenLocal
-
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.7
+          ./gradlew -p external/libxposed-api publishToMavenLocal
 
       - name: Build Release APK
         run: ./gradlew --no-daemon assembleRelease
