@@ -4,12 +4,13 @@
 
     <application
         android:label="Mi Fitness Amap Nav Fix"
+        android:description="@string/module_description"
         android:allowBackup="false"
         android:supportsRtl="true">
         <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
         <!-- Legacy Xposed module metadata (recognized by LSPosed as well) -->
         <meta-data android:name="xposedmodule" android:value="true" />
-        <meta-data android:name="xposeddescription" android:value="Fix Mi Fitness blocking Amap navigation notifications" />
+        <meta-data android:name="xposeddescription" android:resource="@string/module_description" />
         <meta-data android:name="xposedminversion" android:value="93" />
     </application>
 
