@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace "io.github.amapnotifyfix"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "io.github.amapnotifyfix"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        resources {
+            // Make sure the modern API init file is packed
+            merges += "META-INF/xposed/*"
+        }
+    }
+}
+
+dependencies {
+    // Modern LSPosed API (API 100). Will be resolved from mavenLocal in CI.
+    compileOnly "io.github.libxposed:api:100"
+
+    // Legacy XposedBridge API for broad compatibility (LSPosed supports this too).
+    compileOnly "de.robv.android.xposed:api:82"
+}

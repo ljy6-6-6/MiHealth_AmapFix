@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.github.amapnotifyfix">
+
+    <application
+        android:label="Mi Fitness Amap Nav Fix"
+        android:allowBackup="false"
+        android:supportsRtl="true">
+        <!-- Legacy Xposed module metadata (recognized by LSPosed as well) -->
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposeddescription" android:value="Fix Mi Fitness blocking Amap navigation notifications" />
+        <meta-data android:name="xposedminversion" android:value="93" />
+    </application>
+
+</manifest>
