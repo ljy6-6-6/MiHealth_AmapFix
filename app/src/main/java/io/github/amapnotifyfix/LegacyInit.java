@@ -3,7 +3,7 @@ package io.github.amapnotifyfix;
 import android.service.notification.StatusBarNotification;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.XC_MethodReplacement;
+import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import de.robv.android.xposed.XposedHelpers;
 
@@ -27,15 +27,15 @@ public class LegacyInit implements IXposedHookLoadPackage {
                     lpparam.classLoader,
                     "isMipmapNotification",
                     StatusBarNotification.class,
-                    new XC_MethodReplacement() {
+                    new XC_MethodHook() {
                         @Override
-                        protected Object replaceHookedMethod(MethodHookParam param) {
+                        protected void beforeHookedMethod(MethodHookParam param) {
                             StatusBarNotification sbn = (StatusBarNotification) param.args[0];
-                            if (sbn != null && "com.autonavi.minimap".equals(sbn.getPackageName()) && sbn.getId() == 0x4d4) {
-                                return false;
+                            if (sbn != null
+                                    && "com.autonavi.minimap".equals(sbn.getPackageName())
+                                    && sbn.getId() == 0x4d4) {
+                                param.setResult(false);
                             }
-                            // Fallback: also false
-                            return false;
                         }
                     }
             );
