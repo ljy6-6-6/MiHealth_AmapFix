@@ -11,16 +11,16 @@ plugins {
     id 'org.jetbrains.kotlin.android' version '2.2.0' apply false
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
+subprojects {
+    plugins.withId('org.jetbrains.kotlin.android') {
+        kotlin {
+            jvmToolchain(17)
+        }
     }
-}
-
-allprojects {
-    // 统一 Java 17 编译版本
-    tasks.withType(JavaCompile).configureEach {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+    
+    plugins.withId('org.jetbrains.kotlin.jvm') {
+        kotlin {
+            jvmToolchain(17)
+        }
     }
 }
