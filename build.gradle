@@ -14,13 +14,13 @@ plugins {
 subprojects {
     plugins.withId('org.jetbrains.kotlin.android') {
         kotlin {
-            jvmToolchain(21)
+            jvmToolchain(17)
         }
     }
     
     plugins.withId('org.jetbrains.kotlin.jvm') {
         kotlin {
-            jvmToolchain(21)
+            jvmToolchain(17)
         }
     }
 }
