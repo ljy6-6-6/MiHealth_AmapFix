@@ -7,7 +7,7 @@
         android:description="@string/module_description"
         android:allowBackup="false"
         android:supportsRtl="true">
-        <meta-data android:name="xposedscope" android:value="com.mi.health" />
+        <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
         <!-- Legacy Xposed module metadata (recognized by LSPosed as well) -->
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription" android:resource="@string/module_description" />
