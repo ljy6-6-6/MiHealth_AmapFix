@@ -40,6 +40,7 @@ android {
         resources {
             // Make sure the modern API init file is packed
             merges += "META-INF/xposed/*"
+            excludes += ["META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*"]
         }
     }
 }
