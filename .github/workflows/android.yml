@@ -10,18 +10,19 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      # 先用 JDK 21 构建 libxposed/api -> mavenLocal
+      - name: Set up JDK 21 (for libxposed/api)
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: 'gradle'
 
-      # 不要再 apt 装 gradle！apt 版本太老
       - name: Bootstrap Gradle 8.7 and generate wrapper
         run: |
           GRADLE_VERSION=8.7
@@ -42,6 +43,14 @@ jobs:
           mkdir -p external
           git clone --depth=1 https://github.com/libxposed/api.git external/libxposed-api
           ./gradlew -p external/libxposed-api publishToMavenLocal
+
+      # 切回 JDK 17，编你自己的 app
+      - name: Set up JDK 17 (for app)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Build Release APK
         run: ./gradlew --no-daemon assembleRelease
