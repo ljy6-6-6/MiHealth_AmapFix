@@ -1,3 +1,2 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <item type="array" name="xposed_scope" tools:keep="@array/xposed_scope"/>
-</resources>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@array/xposed_scope" />
