@@ -9,7 +9,7 @@ kotlin {
 
 android {
     namespace "io.github.mihealthamapfix"
-    compileSdk 34
+    compileSdk 35
 
     defaultConfig {
         applicationId "io.github.mihealthamapfix"
