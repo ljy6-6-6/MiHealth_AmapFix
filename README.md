@@ -20,7 +20,7 @@
 # 先安装 JDK 21 和 Gradle（或者用 Android Studio 打开）
 git clone YOUR_REPO_URL
 cd MiHealthAmapFix
-# JDK 17 可能可用但不保证
+# JDK 17 可能可用但不保证（外部项目 libxposed/api 要求使用 JAVA 21 构建）
 
 # 准备 Gradle Wrapper（首次构建）
 gradle wrapper --gradle-version 8.7
