@@ -38,10 +38,15 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: |
-            platforms;android-35
-            build-tools;35.0.0
-          accept-android-sdk-licenses: 'true'
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: true
+      
+      - name: Install required Android packages
+        run: |
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Fetch libxposed api (api:100) and publish to mavenLocal
         run: |
