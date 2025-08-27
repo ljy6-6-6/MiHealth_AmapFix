@@ -7,6 +7,9 @@ on:
     branches: [ main, master ]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -44,7 +47,7 @@ jobs:
           git clone --depth=1 https://github.com/libxposed/api.git external/libxposed-api
           ./gradlew -p external/libxposed-api publishToMavenLocal
 
-      # 切回 JDK 17，编你自己的 app
+      # 切回 JDK 17 编译 App
       - name: Set up JDK 17 (for app)
         uses: actions/setup-java@v4
         with:
@@ -55,7 +58,36 @@ jobs:
       - name: Build Release APK
         run: ./gradlew --no-daemon assembleRelease
 
-      - name: Upload artifact
+      - name: Sign APK with release keystore (p12)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
+          alias: ${{ secrets.ANDROID_SIGNING_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_SIGNING_STORE_PASS }}
+          keyPassword: ${{ secrets.ANDROID_SIGNING_KEY_PASS }}
+          keyStoreType: pkcs12
+
+      - name: Prepare release files
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p release
+          APK=$(ls app/build/outputs/apk/release/*-signed.apk | head -n1)
+          cp "$APK" "release/MiFitnessAmapNavFix-${{ github.ref_name }}.apk"
+          (cd release && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.apk
+            release/SHA256SUMS.txt
+          generate_release_notes: true
+
+      - name: Upload artifact (CI only, not tagged)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
           name: MiFitnessAmapNavFix-APK
