@@ -8,19 +8,4 @@ buildscript {
 
 plugins {
     id 'com.android.application' version '8.5.2' apply false
-    id 'org.jetbrains.kotlin.android' version '2.2.0' apply false
-}
-
-subprojects {
-    plugins.withId('org.jetbrains.kotlin.android') {
-        kotlin {
-            jvmToolchain(17)
-        }
-    }
-    
-    plugins.withId('org.jetbrains.kotlin.jvm') {
-        kotlin {
-            jvmToolchain(17)
-        }
-    }
 }
