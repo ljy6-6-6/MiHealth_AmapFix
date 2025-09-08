@@ -8,10 +8,10 @@ android {
 
     defaultConfig {
         applicationId "io.github.mihealthamapfix"
-        minSdk 24
+        minSdk 25
         targetSdk 35
-        versionCode 3
-        versionName "1.3"
+        versionCode 3.1
+        versionName "1.31"
     }
 
     buildFeatures {
@@ -47,6 +47,4 @@ dependencies {
     // Modern LSPosed API (API 100). Will be resolved from mavenLocal in CI.
     compileOnly "io.github.libxposed:api:100"
 
-    // Legacy XposedBridge API for broad compatibility (LSPosed supports this too).
-    compileOnly "de.robv.android.xposed:api:82"
 }
