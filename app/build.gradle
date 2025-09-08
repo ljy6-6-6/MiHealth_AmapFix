@@ -10,7 +10,7 @@ android {
         applicationId "io.github.mihealthamapfix"
         minSdk 25
         targetSdk 35
-        versionCode 3.1
+        versionCode 4
         versionName "1.31"
     }
 
