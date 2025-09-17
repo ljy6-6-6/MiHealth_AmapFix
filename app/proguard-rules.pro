@@ -11,3 +11,10 @@
 
 # runtime 由 LSPosed 提供 libxposed，实现不存在于 APK 内，避免警告（可选）
 -dontwarn io.github.libxposed.api.**
+
+-keepattributes *Annotation*,InnerClasses,EnclosingMethod,Signature,RuntimeVisibleAnnotations,RuntimeInvisibleAnnotations
+-keep class io.github.mihealthamapfix.compat.** { *; }
+-keep class de.robv.android.xposed.** { *; }
+-dontwarn de.robv.android.xposed.**
+-keep class kotlin.** { *; }
+-keepclassmembers class ** { @kotlin.Metadata *; }
