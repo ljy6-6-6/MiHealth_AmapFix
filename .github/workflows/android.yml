@@ -54,7 +54,7 @@ jobs:
           ./gradlew publishToMavenLocal
 
       - name: Build Release APK
-        run: ./gradlew clean assembleRelease --no-daemon
+        run: ./gradlew clean assembleRelease --no-daemon --warning-mode all
 
       - name: List APK outputs (debug)
         run: ls -lah app/build/outputs/apk/release || true
