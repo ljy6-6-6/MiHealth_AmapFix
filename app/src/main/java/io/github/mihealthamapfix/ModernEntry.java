@@ -9,10 +9,6 @@ import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
 
-import io.github.libxposed.api.annotations.XposedHooker;
-import io.github.libxposed.api.annotations.BeforeInvocation;
-import io.github.libxposed.api.annotations.AfterInvocation;
-
 import static io.github.mihealthamapfix.HookConstants.AMAP_NAV_ID;
 import static io.github.mihealthamapfix.HookConstants.AMAP_PACKAGE;
 import static io.github.mihealthamapfix.HookConstants.TARGET_PACKAGES;
@@ -48,11 +44,9 @@ public class ModernEntry extends XposedModule {
     }
 
     /** Hooker for the modern API. */
-    @XposedHooker
     public static class IsMipmapHooker implements XposedInterface.Hooker {
 
         // libxposed: 在 before 回调里若要短路并返回，使用 returnAndSkip(result)
-        @BeforeInvocation
         public static void before(XposedInterface.BeforeHookCallback callback) {
             try {
                 Object[] args = callback.getArgs();
@@ -71,7 +65,6 @@ public class ModernEntry extends XposedModule {
         }
 
         // 这里不需要 after；如果之后想兜底再翻转，也可以在 after 判断再 setResult(false)
-        @AfterInvocation
         public static void after(XposedInterface.AfterHookCallback callback) {
             // no-op
         }
