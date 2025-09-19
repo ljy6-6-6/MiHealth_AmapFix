@@ -13,15 +13,15 @@ plugins {
     id 'org.jetbrains.kotlin.jvm'     version '2.0.20' apply false
 }
 
-// 统一所有子模块的 Java/Kotlin 目标为 21（不使用 kotlin { jvmToolchain }，避免兼容性问题）
+// 统一所有子模块 Java/Kotlin 到 21（避免在 android{} 里使用 kotlinOptions DSL）
 subprojects { sub ->
-    // Java Toolchain（供 :checks 等 JVM 模块）
+    // Java Toolchain（给 :checks 这类 JVM 模块用）
     sub.plugins.withId('java') {
         sub.extensions.configure(JavaPluginExtension) {
             toolchain.languageVersion = JavaLanguageVersion.of(21)
         }
     }
-    // Android 模块（app / library）
+    // Android 模块：设定 Java 21
     ['com.android.application', 'com.android.library'].each { pid ->
         sub.plugins.withId(pid) {
             def androidExt = sub.extensions.findByName('android')
@@ -30,14 +30,10 @@ subprojects { sub ->
                     sourceCompatibility = JavaVersion.VERSION_21
                     targetCompatibility = JavaVersion.VERSION_21
                 }
-                // 旧写法兜底：统一 Kotlin jvmTarget=21（最稳）
-                androidExt.kotlinOptions {
-                    jvmTarget = '21'
-                }
             }
         }
     }
-    // 对所有 KotlinCompile 任务再兜一层（防第三方插件覆盖）
+    // Kotlin 编译目标 21（通过任务统一配置，兼容所有 AGP/Kotlin 版本）
     sub.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
         kotlinOptions {
             jvmTarget = '21'

@@ -20,9 +20,7 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
-        debug {
-            minifyEnabled false
-        }
+        debug { minifyEnabled false }
     }
 
     packaging {
@@ -32,25 +30,15 @@ android {
         }
     }
 
-    // Java 21
+    // Java 21（Kotlin jvmTarget 由根脚本的 KotlinCompile 任务统一设置为 21）
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
-    }
-
-    // 使用稳定旧写法，避免 jvmToolchain DSL 兼容性问题
-    kotlinOptions {
-        jvmTarget = '21'
-        freeCompilerArgs += ['-Xjvm-default=all']
     }
 }
 
 dependencies {
     implementation "androidx.annotation:annotation:1.9.0"
-
-    // 现代入口（LSPosed / libxposed API）
-    compileOnly "io.github.libxposed:api:100"
-
-    // 传统入口（XposedBridge），用于兼容
-    compileOnly "de.robv.android.xposed:api:82"
+    compileOnly "io.github.libxposed:api:100"     // 现代入口（LSPosed）
+    compileOnly "de.robv.android.xposed:api:82"   // 传统入口（兼容）
 }
