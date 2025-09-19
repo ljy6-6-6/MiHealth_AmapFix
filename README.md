@@ -6,7 +6,7 @@
 - ### 针对 HyperOS 3 版本由于焦点通知更变为灵动岛，目前有反馈存在兼容性不生效问题，由于没有已 Root 的对应版本设备供测试，目前在尝试云适配（不一定可用）
 
 - 兼容 **LSPosed 新 API (api:100)**：现代入口 `io.github.mihealthamapfix.ModernEntry`
-- ~~兼容 **旧 XposedBridge API**：传统入口 `io.github.mihealthamapfix.LegacyInit`~~（移除非必要支持）
+- 兼容 **旧 XposedBridge API**：传统入口 `io.github.mihealthamapfix.LegacyInit`
 - 推荐在 LSPosed 中**只勾选**「小米运动健康」应用的作用域
 
 ## 构建
