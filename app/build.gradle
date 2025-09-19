@@ -49,9 +49,10 @@ android {
 }
 
 dependencies {
-    // Modern LSPosed API (API 100). Will be resolved from mavenLocal in CI.
+    implementation "androidx.annotation:annotation:1.9.0"
+    // 新版 Lsposed api:100 入口
     compileOnly "io.github.libxposed:api:100"
 
-    // Legacy XposedBridge API for broad compatibility (LSPosed supports this too).
+    // 旧版 XposedBridge 入口，Lsposed 应该同样加载
     compileOnly "de.robv.android.xposed:api:82"
 }
