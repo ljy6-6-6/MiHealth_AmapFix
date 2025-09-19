@@ -13,7 +13,9 @@ plugins {
     id 'org.jetbrains.kotlin.jvm'     version '2.0.20' apply false
 }
 
+// 统一所有子模块的 Java/Kotlin 目标为 21（不使用 kotlin { jvmToolchain }，避免兼容性问题）
 subprojects { sub ->
+    // Java Toolchain（供 :checks 等 JVM 模块）
     sub.plugins.withId('java') {
         sub.extensions.configure(JavaPluginExtension) {
             toolchain.languageVersion = JavaLanguageVersion.of(21)
@@ -28,25 +30,18 @@ subprojects { sub ->
                     sourceCompatibility = JavaVersion.VERSION_21
                     targetCompatibility = JavaVersion.VERSION_21
                 }
-            }
-            // Kotlin Android
-            sub.plugins.withId('org.jetbrains.kotlin.android') {
-                sub.extensions.configure(org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension) {
-                    jvmToolchain(21)
-                    compilerOptions {
-                        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-                    }
+                // 旧写法兜底：统一 Kotlin jvmTarget=21（最稳）
+                androidExt.kotlinOptions {
+                    jvmTarget = '21'
                 }
             }
         }
     }
-    // Kotlin JVM 模块
-    sub.plugins.withId('org.jetbrains.kotlin.jvm') {
-        sub.extensions.configure(org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension) {
-            jvmToolchain(21)
-            compilerOptions {
-                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-            }
+    // 对所有 KotlinCompile 任务再兜一层（防第三方插件覆盖）
+    sub.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            jvmTarget = '21'
+            freeCompilerArgs += ['-Xjvm-default=all']
         }
     }
 }

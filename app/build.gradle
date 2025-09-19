@@ -32,22 +32,16 @@ android {
         }
     }
 
+    // Java 21
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
 
+    // 使用稳定旧写法，避免 jvmToolchain DSL 兼容性问题
     kotlinOptions {
         jvmTarget = '21'
-    }
-}
-
-kotlin {
-    jvmToolchain(21)
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-        // 为接口默认方法提供更好兼容
-        freeCompilerArgs.addAll('-Xjvm-default=all')
+        freeCompilerArgs += ['-Xjvm-default=all']
     }
 }
 
