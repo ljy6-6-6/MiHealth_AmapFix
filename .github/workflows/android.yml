@@ -2,8 +2,7 @@ name: build-apk
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
     branches: [ main, master ]
   pull_request:
 
@@ -13,7 +12,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,10 +19,10 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '21'
-          distribution: 'temurin'
-          cache: 'gradle'
-  
+          cache: gradle
+
       - name: Bootstrap Gradle 8.10.2 and generate wrapper
         run: |
           GRADLE_VERSION=8.10.2
@@ -34,6 +32,11 @@ jobs:
           gradle --version
           gradle wrapper --gradle-version ${GRADLE_VERSION} --distribution-type all
 
+      - name: Show Gradle & Java
+        run: |
+          ./gradlew --version
+          java -version
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -42,16 +45,7 @@ jobs:
 
       - name: Install required Android packages
         run: |
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Fetch libxposed api (api:100) and publish to mavenLocal
-        run: |
-          mkdir -p external
-          git clone --depth=1 https://github.com/libxposed/api.git external/libxposed-api
-          ./gradlew -p external/libxposed-api publishToMavenLocal
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Publish libxposed api to mavenLocal
         run: |
@@ -59,11 +53,8 @@ jobs:
           cd api
           ./gradlew publishToMavenLocal
 
-      - name: Build
-        run: ./gradlew clean assembleRelease
-
       - name: Build Release APK
-        run: ./gradlew --no-daemon assembleRelease
+        run: ./gradlew clean assembleRelease --no-daemon
 
       - name: List APK outputs (debug)
         run: ls -lah app/build/outputs/apk/release || true
@@ -71,9 +62,7 @@ jobs:
       # === 签名（仅在 tag 构建）===
       - name: Decode PKCS12 keystore
         if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          echo "${{ secrets.ANDROID_SIGNING_KEY }}" | base64 -d > release.p12
-          ls -lh release.p12
+        run: echo "${{ secrets.ANDROID_SIGNING_KEY }}" | base64 -d > release.p12
 
       - name: Zipalign & Sign APK (pkcs12)
         if: startsWith(github.ref, 'refs/tags/')
@@ -85,22 +74,11 @@ jobs:
           set -e
           UNSIGNED=$(ls app/build/outputs/apk/release/*-unsigned.apk | head -n1)
           echo "Unsigned APK: $UNSIGNED"
-
           ZIPALIGN="$ANDROID_HOME/build-tools/35.0.0/zipalign"
           APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-
           mkdir -p release
           $ZIPALIGN -v -p 4 "$UNSIGNED" release/app-aligned.apk
-
-          $APKSIGNER sign \
-            --ks release.p12 \
-            --ks-type PKCS12 \
-            --ks-key-alias "$ALIAS" \
-            --ks-pass pass:"$STORE_PASS" \
-            --key-pass pass:"$KEY_PASS" \
-            --out "release/MiFitnessAmapNavFix-${GITHUB_REF_NAME}.apk" \
-            release/app-aligned.apk
-
+          $APKSIGNER sign             --ks release.p12             --ks-type PKCS12             --ks-key-alias "$ALIAS"             --ks-pass pass:"$STORE_PASS"             --key-pass pass:"$KEY_PASS"             --out "release/MiFitnessAmapNavFix-${GITHUB_REF_NAME}.apk"             release/app-aligned.apk
           $APKSIGNER verify -v "release/MiFitnessAmapNavFix-${GITHUB_REF_NAME}.apk"
           (cd release && sha256sum *.apk > SHA256SUMS.txt)
 
@@ -113,7 +91,7 @@ jobs:
             release/SHA256SUMS.txt
           generate_release_notes: true
 
-      - name: Upload artifact (CI only, not tagged)
+      - name: Upload artifact (PR/分支构建)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
