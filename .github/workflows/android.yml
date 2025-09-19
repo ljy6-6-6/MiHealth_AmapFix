@@ -18,8 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # JDK 21：构建 libxposed/api -> mavenLocal
-      - name: Set up JDK 21 (for libxposed/api)
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -53,14 +52,6 @@ jobs:
           mkdir -p external
           git clone --depth=1 https://github.com/libxposed/api.git external/libxposed-api
           ./gradlew -p external/libxposed-api publishToMavenLocal
-
-      # 切回 JDK 17：编译 App（不在 Gradle 内签名）
-      - name: Set up JDK 17 (for app)
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'gradle'
 
       - name: Publish libxposed api to mavenLocal
         run: |
