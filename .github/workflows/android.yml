@@ -24,15 +24,15 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: 'gradle'
-
-      - name: Bootstrap Gradle 8.7 and generate wrapper
+  
+      - name: Bootstrap Gradle 8.10.2 and generate wrapper
         run: |
-          GRADLE_VERSION=8.7
+          GRADLE_VERSION=8.10.2
           wget -q https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
           unzip -q gradle-${GRADLE_VERSION}-bin.zip -d $HOME/gradle
           echo "$HOME/gradle/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
           gradle --version
-          gradle wrapper --gradle-version ${GRADLE_VERSION}
+          gradle wrapper --gradle-version ${GRADLE_VERSION} --distribution-type all
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
