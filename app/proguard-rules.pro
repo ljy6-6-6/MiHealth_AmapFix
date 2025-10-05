@@ -11,3 +11,6 @@
 
 # runtime 由 LSPosed 提供 libxposed，实现不存在于 APK 内，避免警告（可选）
 -dontwarn io.github.libxposed.api.**
+
+# 保留兼容性占位注解，避免被移除（可选）
+-keep @interface io.github.libxposed.api.annotations.XposedHooker

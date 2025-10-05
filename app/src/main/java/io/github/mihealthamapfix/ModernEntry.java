@@ -8,7 +8,12 @@ import java.util.Set;
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.XC_MethodHook;
 
+
+import io.github.libxposed.api.annotations.XposedHooker;
 import static io.github.mihealthamapfix.HookConstants.AMAP_NAV_ID;
 import static io.github.mihealthamapfix.HookConstants.AMAP_PACKAGE;
 import static io.github.mihealthamapfix.HookConstants.TARGET_PACKAGES;
@@ -36,7 +41,44 @@ public class ModernEntry extends XposedModule {
             ClassLoader cl = param.getClassLoader();
             Class<?> helper = cl.loadClass("com.xiaomi.fitness.notify.util.NotificationFilterHelper");
             Method m = helper.getDeclaredMethod("isMipmapNotification", StatusBarNotification.class);
-            hook(m, IsMipmapHooker.class);
+try {
+    // 优先使用新版 libxposed Hook（官方 API 100）
+    hook(m, IsMipmapHooker.class);
+} catch (IllegalArgumentException e) {
+    String _msg = e.getMessage() == null ? "" : e.getMessage();
+    if (_msg.contains("Hooker should be annotated with @XposedHooker")) {
+        // 兼容：第三方旧实现仍然要求 @XposedHooker 注解，自动回退到旧版 XposedBridge Hook 方案
+        XposedBridge.log("MiHealthAmapFix: fallback → Legacy (XC_MethodHook) due to: " + _msg);
+        try {
+            XposedHelpers.findAndHookMethod(
+                    "com.xiaomi.fitness.notify.util.NotificationFilterHelper",
+                    cl,
+                    "isMipmapNotification",
+                    android.service.notification.StatusBarNotification.class,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            Object arg0 = param.args != null && param.args.length > 0 ? param.args[0] : null;
+                            if (arg0 instanceof android.service.notification.StatusBarNotification) {
+                                android.service.notification.StatusBarNotification sbn =
+                                        (android.service.notification.StatusBarNotification) arg0;
+                                if (sbn != null
+                                        && "com.autonavi.minimap".equals(sbn.getPackageName())
+                                        && sbn.getId() == 0x4d4 /* AMAP_NAV_ID */) {
+                                    param.setResult(false);
+                                }
+                            }
+                        }
+                    }
+            );
+        } catch (Throwable t2) {
+            XposedBridge.log("MiHealthAmapFix: Legacy fallback failed: " + t2);
+        }
+    } else {
+        throw e;
+    }
+}
+
             log("MiHealthAmapFix: hooked isMipmapNotification in " + pkg);
         } catch (Throwable t) {
             log("MiHealthAmapFix: method not found; maybe old version. " + t);
@@ -44,7 +86,8 @@ public class ModernEntry extends XposedModule {
     }
 
     /** Hooker for the modern API. */
-    public static class IsMipmapHooker implements XposedInterface.Hooker {
+    @XposedHooker
+        public static class IsMipmapHooker implements XposedInterface.Hooker {
 
         // libxposed: 在 before 回调里若要短路并返回，使用 returnAndSkip(result)
         public static void before(XposedInterface.BeforeHookCallback callback) {
