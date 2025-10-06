@@ -1,11 +1,15 @@
 # MiHealth AmapFix (LSPosed module)
+
 **修复点**：小米运动健康 (Mi Fitness) 3.44.0 引入 `NotificationFilterHelper.isMipmapNotification(StatusBarNotification)`，
 对 `com.autonavi.minimap`（高德地图）导航常驻焦点通知 (id = `0x4d4`) 做了特判，导致实时导航信息不再被转发到手表/手环。
 本模块在运行时 Hook 该方法，**强制返回 `false`**，从而不再拦截这条焦点通知。
+
 ### 注：高德地图的导航焦点通知理论只在 HyperOS 2.0 以上版本显示，且需高德地图的版本支持，请确保你在系统通知栏能在步行/骑行导航时看到导航的焦点通知信息后再使用本模块解锁限制。
+
 - ### 针对 HyperOS 3 版本由于焦点通知更变为灵动岛，目前有反馈存在兼容性不生效问题，由于没有已 Root 的对应版本设备供测试，目前在尝试云适配（不一定可用）
 
 - 兼容 **LSPosed 新 API (api:100)**：现代入口 `io.github.mihealthamapfix.ModernEntry`
+  > 部分框架存在使用现代入口但不支持现代最新语法的问题，将短路返回其它支持
 - 兼容 **旧 XposedBridge API**：传统入口 `io.github.mihealthamapfix.LegacyInit`
 - 推荐在 LSPosed 中**只勾选**「小米运动健康」应用的作用域
 
