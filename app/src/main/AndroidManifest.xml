@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.github.mihealthamapfix">
 
+    <!-- Optional: Shizuku (if present on device) -->
+    <uses-permission android:name="shizuku.permission.USE_SHIZUKU"/>
+
     <application
         android:label="MiHealth AmapFix"
         android:description="@string/module_description"
@@ -12,6 +15,13 @@
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription" android:resource="@string/module_description" />
         <meta-data android:name="xposedminversion" android:value="93" />
+
+        <!-- DND bridge service: runs outside target app, owns Shizuku/root -->
+        <service
+            android:name=".dnd.DndBridgeService"
+            android:exported="true"
+            android:enabled="true"
+            android:process=":dndbridge" />
     </application>
 
 </manifest>
