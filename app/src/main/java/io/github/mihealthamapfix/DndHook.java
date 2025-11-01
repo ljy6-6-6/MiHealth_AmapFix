@@ -9,7 +9,7 @@ import android.content.Context;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.AndroidAppHelper;
+import io.github.mihealthamapfix.util.AppCtx;
 
 import io.github.mihealthamapfix.dnd.DndBridgeClient;
 import io.github.mihealthamapfix.dnd.DndUtils;
@@ -28,7 +28,8 @@ public final class DndHook {
                 new XC_MethodHook() {
                     @Override protected void beforeHookedMethod(MethodHookParam param) {
                         if (Build.VERSION.SDK_INT < 35) return; // only on 35+
-                        Context ctx = AndroidAppHelper.currentApplication();
+                        Application app = AppCtx.app();
+                        Context ctx = app == null ? null : app.getApplicationContext();
                         if (ctx != null) {
                             DndBridgeClient.bindIfNeeded(ctx);
                         }
