@@ -15,7 +15,8 @@ android {
     }
 
     buildFeatures {
-        buildConfig = false 
+        buildConfig = false
+        aidl = true
     }
 
     buildTypes {
@@ -56,5 +57,9 @@ dependencies {
 
     // Shizuku (optional at runtime)
     implementation "dev.rikka.shizuku:api:13.1.5"
+    implementation "dev.rikka.shizuku:provider:13.1.5"
+
+    // Fix missing annotation classes during compilation
+    compileOnly "androidx.annotation:annotation:1.8.0"
 }
 

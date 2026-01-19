@@ -14,3 +14,16 @@
 
 # 保留兼容性占位注解，避免被移除（可选）
 -keep @interface io.github.libxposed.api.annotations.XposedHooker
+
+# ----------------------------
+# Shizuku UserService
+# ----------------------------
+# Shizuku binds user services by class name. Keep it stable in release builds.
+-keep class io.github.mihealthamapfix.dnd.ShizukuDndUserService { *; }
+-keep class io.github.mihealthamapfix.dnd.IShizukuDndService** { *; }
+
+# Keep bridge AIDL (used跨进程 Binder)
+-keep class io.github.mihealthamapfix.IDndBridgeService** { *; }
+
+# Keep Shizuku API classes to avoid aggressive shrinking causing bind issues
+-keep class rikka.shizuku.** { *; }

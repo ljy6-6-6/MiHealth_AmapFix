@@ -11,7 +11,7 @@ public class DndModernEntry extends XposedModule {
         super(base, param);
     }
 
-    @Override public void onPackageLoaded(XposedModuleInterface.PackageLoadedParam param) throws Throwable {
+    @Override public void onPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
         String pkg = param.getPackageName();
         if (!TARGET_PACKAGES.contains(pkg)) return;
         DndHook.install(param.getClassLoader());
