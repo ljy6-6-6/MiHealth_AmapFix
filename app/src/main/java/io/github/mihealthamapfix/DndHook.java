@@ -14,12 +14,15 @@ import io.github.mihealthamapfix.dnd.DndBridgeClient;
 import io.github.mihealthamapfix.dnd.DndUtils;
 import io.github.mihealthamapfix.util.AppCtx;
 
+import static io.github.mihealthamapfix.util.L.s;
+
 /**
  * All DND-related hooks for MiHealth on Android 15+ (SDK 35).
  *
- * 1) Forces isSupportZenMode() → true   (unhides the DND sync toggle)
- * 2) Forces isNotificationPolicyAccessGranted() → true   (app thinks it has DND policy access)
+ * 1) Forces isSupportZenMode() → true      (恢复勿扰同步开关)
+ * 2) Forces isNotificationPolicyAccessGranted() → true  (通过权限检查)
  * 3) Intercepts setInterruptionFilter() → routes through root/Shizuku bridge
+ * 4) Hooks Application.onCreate() to eagerly bind the bridge service
  */
 public final class DndHook {
     private static final String TAG = "AmapFix-DND";
@@ -27,7 +30,7 @@ public final class DndHook {
 
     public static void install(ClassLoader cl) {
         if (Build.VERSION.SDK_INT < 35) {
-            Log.i(TAG, "SDK < 35, DND hooks not needed");
+            Log.i(TAG, s("SDK < 35，无需 DND 补丁", "SDK < 35, DND hooks not needed"));
             return;
         }
 
@@ -36,20 +39,19 @@ public final class DndHook {
         hookSetInterruptionFilter();
         hookAppOnCreate(cl);
 
-        Log.i(TAG, "All DND hooks installed (SDK=" + Build.VERSION.SDK_INT + ")");
+        Log.i(TAG, s("已安装全部 DND Hook (SDK=" + Build.VERSION.SDK_INT + ")",
+                "All DND hooks installed (SDK=" + Build.VERSION.SDK_INT + ")"));
     }
 
     /**
-     * Hook ZenUtilsKt.isSupportZenMode() to always return true.
-     * This is a Kotlin top-level function compiled to a static method on the
-     * class com.xiaomi.fitness.devicesettings.utils.ZenUtilsKt.
+     * Hook ZenUtilsKt.isSupportZenMode() → true.
+     * 恢复设备设置中被隐藏的勿扰模式同步开关。
      */
     private static void hookIsSupportZenMode(ClassLoader cl) {
         try {
             Class<?> zenUtilsKt = cl.loadClass(
                     "com.xiaomi.fitness.devicesettings.utils.ZenUtilsKt");
 
-            // Hook all methods named "isSupportZenMode" (including $default variant)
             int hooked = 0;
             for (java.lang.reflect.Method m : zenUtilsKt.getDeclaredMethods()) {
                 if (m.getName().equals("isSupportZenMode")
@@ -61,22 +63,23 @@ public final class DndHook {
                         }
                     });
                     hooked++;
-                    Log.i(TAG, "Hooked " + m.getName() + " (params=" + m.getParameterCount() + ")");
+                    Log.i(TAG, s("已 Hook " + m.getName(),
+                            "Hooked " + m.getName()));
                 }
             }
 
             if (hooked == 0) {
-                Log.w(TAG, "No isSupportZenMode methods found on ZenUtilsKt");
+                Log.w(TAG, s("未找到 isSupportZenMode 方法",
+                        "No isSupportZenMode methods found on ZenUtilsKt"));
             }
         } catch (Throwable t) {
-            Log.w(TAG, "Failed to hook isSupportZenMode", t);
+            Log.w(TAG, s("Hook isSupportZenMode 失败", "Failed to hook isSupportZenMode"), t);
         }
     }
 
     /**
-     * Hook NotificationManager.isNotificationPolicyAccessGranted() to return true.
-     * This lets MiHealth's MediaSyncManager and NotifyService think the app has
-     * DND policy access, so they don't block the sync pipeline.
+     * Hook NotificationManager.isNotificationPolicyAccessGranted() → true.
+     * 让 MediaSyncManager / NotifyService 认为已获得勿扰策略权限。
      */
     private static void hookIsNotificationPolicyAccessGranted() {
         try {
@@ -94,14 +97,14 @@ public final class DndHook {
                     }
             );
         } catch (Throwable t) {
-            Log.w(TAG, "Failed to hook isNotificationPolicyAccessGranted", t);
+            Log.w(TAG, s("Hook isNotificationPolicyAccessGranted 失败",
+                    "Failed to hook isNotificationPolicyAccessGranted"), t);
         }
     }
 
     /**
-     * Hook NotificationManager.setInterruptionFilter() to route DND changes
-     * through our root/Shizuku bridge instead of the system API (which is
-     * blocked for non-system apps targeting SDK 35).
+     * Hook NotificationManager.setInterruptionFilter() → DND Bridge.
+     * 将实际的勿扰操作通过 root/Shizuku 桥接执行。
      */
     private static void hookSetInterruptionFilter() {
         try {
@@ -122,25 +125,27 @@ public final class DndHook {
 
                             if (DndBridgeClient.isActive()) {
                                 DndBridgeClient.setZen(zen);
-                                param.setResult(null); // skip original (no-op on target 35)
-                                Log.i(TAG, "Routed DND via bridge: zen=" + zen);
+                                param.setResult(null);
+                                Log.i(TAG, s("已通过桥接设置 DND: zen=" + zen,
+                                        "Routed DND via bridge: zen=" + zen));
                             } else {
                                 if (!sWarned) {
                                     sWarned = true;
-                                    Log.w(TAG, "Bridge not active; DND call may fail silently");
+                                    Log.w(TAG, s("桥接未激活，DND 操作可能失败",
+                                            "Bridge not active; DND call may fail silently"));
                                 }
                             }
                         }
                     }
             );
         } catch (Throwable t) {
-            Log.w(TAG, "Failed to hook setInterruptionFilter", t);
+            Log.w(TAG, s("Hook setInterruptionFilter 失败",
+                    "Failed to hook setInterruptionFilter"), t);
         }
     }
 
     /**
-     * Hook Application.onCreate() to eagerly bind the DND bridge service,
-     * so it's ready before the user reaches the DND settings page.
+     * Hook Application.onCreate() 提前绑定桥接服务。
      */
     private static void hookAppOnCreate(ClassLoader cl) {
         try {
@@ -154,15 +159,18 @@ public final class DndHook {
                             if (app == null) return;
                             try {
                                 DndBridgeClient.bindIfNeeded(app.getApplicationContext());
-                                Log.i(TAG, "Eagerly started DND bridge bind");
+                                Log.i(TAG, s("已提前绑定 DND 桥接服务",
+                                        "Eagerly started DND bridge bind"));
                             } catch (Throwable t) {
-                                Log.w(TAG, "Eager bridge bind failed", t);
+                                Log.w(TAG, s("提前绑定桥接服务失败",
+                                        "Eager bridge bind failed"), t);
                             }
                         }
                     }
             );
         } catch (Throwable t) {
-            Log.w(TAG, "Failed to hook Application.onCreate", t);
+            Log.w(TAG, s("Hook Application.onCreate 失败",
+                    "Failed to hook Application.onCreate"), t);
         }
     }
 }

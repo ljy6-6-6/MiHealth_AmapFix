@@ -2,7 +2,7 @@ package io.github.mihealthamapfix;
 
 import android.service.notification.StatusBarNotification;
 
-
+import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
 
@@ -13,19 +13,28 @@ import de.robv.android.xposed.XC_MethodHook;
 import static io.github.mihealthamapfix.HookConstants.AMAP_NAV_ID;
 import static io.github.mihealthamapfix.HookConstants.AMAP_PACKAGE;
 import static io.github.mihealthamapfix.HookConstants.TARGET_PACKAGES;
+import static io.github.mihealthamapfix.util.L.s;
 
 /**
- * Modern LSPosed entry (libxposed API 101).
- *
- * API 101 uses a no-arg constructor and interceptor-chain hooking.
- * Actual hooking falls back to legacy XposedBridge/XposedHelpers API for maximum compatibility
- * with both API 100 and 101 frameworks.
+ * Modern LSPosed entry — works on both API 100 and API 101 frameworks.
+ * <p>
+ * API 100: framework calls the 2-arg constructor (XposedInterface, ModuleLoadedParam).
+ * API 101: framework calls the no-arg constructor, then attachFramework().
+ * <p>
+ * Actual hooking uses legacy XposedBridge/XposedHelpers API for maximum compatibility.
  */
 public class ModernEntry extends XposedModule {
+
+    private static final String TAG = "AmapFix";
 
     /** API 101: no-arg constructor. */
     public ModernEntry() {
         super();
+    }
+
+    /** API 100: 2-arg constructor. */
+    public ModernEntry(XposedInterface base, XposedModuleInterface.ModuleLoadedParam param) {
+        super(base, param);
     }
 
     @Override
@@ -33,33 +42,34 @@ public class ModernEntry extends XposedModule {
         String pkg = param.getPackageName();
         if (!TARGET_PACKAGES.contains(pkg)) return;
 
-        ClassLoader cl;
-        try {
-            // API 101: getDefaultClassLoader() replaces getClassLoader()
-            cl = param.getDefaultClassLoader();
-        } catch (Throwable e) {
-            // If getDefaultClassLoader() does not exist (shouldn't happen on 101),
-            // try reflection fallback to getClassLoader() for safety
-            try {
-                cl = (ClassLoader) param.getClass()
-                        .getMethod("getClassLoader")
-                        .invoke(param);
-            } catch (Throwable e2) {
-                log(android.util.Log.WARN, "MiHealthAmapFix",
-                        "Cannot get classloader: " + e2);
-                return;
-            }
+        ClassLoader cl = getClassLoaderCompat(param);
+        if (cl == null) {
+            XposedBridge.log(TAG + ": " + s("无法获取 ClassLoader", "Cannot get ClassLoader"));
+            return;
         }
 
         hookNotificationFilter(cl);
-
-        // DND sync fix for Android 15+ (SDK 35)
         DndHook.install(cl);
     }
 
     /**
+     * Compatible classloader accessor.
+     * API 100 has getClassLoader(), API 101 has getDefaultClassLoader().
+     */
+    private static ClassLoader getClassLoaderCompat(XposedModuleInterface.PackageLoadedParam param) {
+        // Try API 101 first
+        try {
+            return param.getDefaultClassLoader();
+        } catch (Throwable ignored) {}
+        // Fallback to API 100
+        try {
+            return param.getClassLoader();
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /**
      * Hook NotificationFilterHelper.isMipmapNotification using legacy XposedBridge API.
-     * This provides maximum compatibility across framework versions.
      */
     private void hookNotificationFilter(ClassLoader cl) {
         try {
@@ -82,11 +92,13 @@ public class ModernEntry extends XposedModule {
                         }
                     }
             );
-            log(android.util.Log.INFO, "MiHealthAmapFix",
-                    "Hooked isMipmapNotification in " + cl);
+            XposedBridge.log(TAG + ": " + s(
+                    "已 Hook isMipmapNotification (Modern入口)",
+                    "Hooked isMipmapNotification (Modern entry)"));
         } catch (Throwable t) {
-            log(android.util.Log.WARN, "MiHealthAmapFix",
-                    "isMipmapNotification not found; maybe old version. " + t);
+            XposedBridge.log(TAG + ": " + s(
+                    "isMipmapNotification 未找到，可能是旧版 APP: ",
+                    "isMipmapNotification not found, maybe old app version: ") + t);
         }
     }
 }
