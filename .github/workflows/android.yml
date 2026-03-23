@@ -26,13 +26,12 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      - name: Bootstrap Gradle 8.7 and generate wrapper
+      - name: Bootstrap Gradle wrapper for main project
         run: |
           GRADLE_VERSION=8.7
           wget -q https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
           unzip -q gradle-${GRADLE_VERSION}-bin.zip -d $HOME/gradle
-          echo "$HOME/gradle/gradle-${GRADLE_VERSION}/bin" >> $GITHUB_PATH
-          gradle --version
+          export PATH="$HOME/gradle/gradle-${GRADLE_VERSION}/bin:$PATH"
           gradle wrapper --gradle-version ${GRADLE_VERSION}
 
       - name: Set up Android SDK
@@ -52,7 +51,10 @@ jobs:
         run: |
           mkdir -p external
           git clone --depth=1 https://github.com/libxposed/api.git external/libxposed-api
-          ./gradlew -p external/libxposed-api publishToMavenLocal
+          # Use libxposed-api's own wrapper (requires Gradle 9.3.1+ / AGP 9.1.0)
+          cd external/libxposed-api
+          chmod +x gradlew
+          ./gradlew publishToMavenLocal
 
       # 切回 JDK 17：编译 App（不在 Gradle 内签名）
       - name: Set up JDK 17 (for app)
