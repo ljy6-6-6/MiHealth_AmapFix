@@ -3,6 +3,10 @@ package io.github.mihealthamapfix;
 import android.app.NotificationManager;
 import android.os.Build;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
@@ -12,13 +16,15 @@ import static io.github.mihealthamapfix.util.L.s;
 /**
  * All DND-related hooks for MiHealth on Android 15+ (SDK 35).
  *
- * 1) Forces isSupportZenMode() → true      (恢复勿扰同步开关)
- * 2) Forces isNotificationPolicyAccessGranted() → true  (通过权限检查)
- * 3) Intercepts setInterruptionFilter() → executes DND via root shell
+ * Strategy:
+ * 1. Find and hook isAboveAndroid15() → false   (the version gate, if it exists as a method)
+ * 2. Hook handleDeviceSettingDND to spoof SDK_INT=34 during its execution
+ *    (covers the case where the check is inlined)
+ * 3. Hook isNotificationPolicyAccessGranted() → true
+ * 4. Hook setInterruptionFilter() → execute DND via root
  */
 public final class DndHook {
     private static final String TAG = "AmapFix-DND";
-    private static volatile boolean sWarned = false;
 
     public static void install(ClassLoader cl) {
         XposedBridge.log(TAG + ": install() " + s("开始，SDK=" + Build.VERSION.SDK_INT,
@@ -29,110 +35,195 @@ public final class DndHook {
             return;
         }
 
-        hookIsSupportZenMode(cl);
+        hookZenModeChecks(cl);
         hookIsNotificationPolicyAccessGranted();
         hookSetInterruptionFilter();
 
         XposedBridge.log(TAG + ": " + s("全部 DND Hook 已安装", "All DND hooks installed"));
     }
 
+    // ─── 核心：寻找并绕过 SDK 版本检查 ────────────────────────────────
+
     /**
-     * Hook ZenUtilsKt.isSupportZenMode() → true.
-     * 恢复设备设置中被隐藏的勿扰模式同步开关。
+     * Multi-strategy approach to bypass the isSupportZenMode / isAboveAndroid15 check.
+     * The Kotlin compiler may have inlined isSupportZenMode, so:
+     *  1) Scan relevant classes for isAboveAndroid15 / version-gate methods → hook to return false
+     *  2) Hook handleDeviceSettingDND to temporarily set SDK_INT=34 while it runs
      */
-    private static void hookIsSupportZenMode(ClassLoader cl) {
-        String className = "com.xiaomi.fitness.devicesettings.utils.ZenUtilsKt";
-        try {
-            Class<?> zenUtilsKt = cl.loadClass(className);
-            XposedBridge.log(TAG + ": " + s("已找到类 " + className, "Found class " + className));
+    private static void hookZenModeChecks(ClassLoader cl) {
+        boolean foundVersionGate = scanAndHookVersionGates(cl);
 
-            int hooked = 0;
-            for (java.lang.reflect.Method m : zenUtilsKt.getDeclaredMethods()) {
-                String name = m.getName();
-                // Also try common obfuscated patterns & related methods
-                if (name.contains("isSupportZenMode")
-                        || name.contains("isSupportZenModeSync")
-                        || name.contains("isSupportZenRuleSync")) {
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            param.setResult(true);
-                        }
-                    });
-                    hooked++;
-                    XposedBridge.log(TAG + ": " + s(
-                            "已 Hook " + name + " (参数=" + m.getParameterCount() + ") → true",
-                            "Hooked " + name + " (params=" + m.getParameterCount() + ") → true"));
-                }
-            }
+        // Always hook handleDeviceSettingDND to spoof SDK_INT — covers inlined checks
+        hookHandleDeviceSettingDND(cl);
 
-            if (hooked == 0) {
-                // Log all methods for diagnostics
-                XposedBridge.log(TAG + ": " + s(
-                        "未找到 isSupportZenMode 方法！该类的全部方法：",
-                        "No isSupportZenMode found! All methods in this class:"));
-                for (java.lang.reflect.Method m : zenUtilsKt.getDeclaredMethods()) {
-                    XposedBridge.log(TAG + ":   " + m.getName()
-                            + " (params=" + m.getParameterCount()
-                            + ", ret=" + m.getReturnType().getSimpleName() + ")");
-                }
-            }
-        } catch (ClassNotFoundException e) {
+        if (!foundVersionGate) {
             XposedBridge.log(TAG + ": " + s(
-                    "类 " + className + " 未找到！该类可能已被混淆。尝试扫描全部类...",
-                    "Class " + className + " not found! Possibly obfuscated. Scanning..."));
-            scanForZenModeMethod(cl);
-        } catch (Throwable t) {
-            XposedBridge.log(TAG + ": " + s("Hook isSupportZenMode 异常: ",
-                    "isSupportZenMode hook error: ") + t);
+                    "未找到独立的版本检查方法，依靠 SDK_INT 暂时改写来绕过内联检查",
+                    "No standalone version-gate found, relying on SDK_INT spoofing for inlined checks"));
         }
     }
 
     /**
-     * If the class name is obfuscated, try to find the method by scanning
-     * related known packages for boolean-returning static methods.
+     * Scan for isAboveAndroid15() and related version-check methods.
+     * Returns true if at least one gate method was found and hooked.
      */
-    private static void scanForZenModeMethod(ClassLoader cl) {
-        // Try alternative class names that might exist
-        String[] candidates = {
+    private static boolean scanAndHookVersionGates(ClassLoader cl) {
+        boolean found = false;
+
+        // Class names to scan (common MiHealth utility packages)
+        String[] classNames = {
                 "com.xiaomi.fitness.devicesettings.utils.ZenUtilsKt",
                 "com.xiaomi.fitness.devicesettings.utils.ZenUtils",
-                "com.xiaomi.wearable.devicesettings.utils.ZenUtilsKt",
-                "com.xiaomi.wearable.devicesettings.utils.ZenUtils",
+                "com.xiaomi.fitness.utils.SystemKt",
+                "com.xiaomi.fitness.utils.SystemUtils",
+                "com.xiaomi.fitness.utils.VersionUtils",
+                "com.xiaomi.fitness.utils.VersionUtilsKt",
+                "com.xiaomi.fitness.utils.RomUtils",
+                "com.xiaomi.fitness.utils.RomUtilsKt",
+                "com.xiaomi.fitness.common.utils.SystemUtils",
+                "com.xiaomi.fitness.common.utils.SystemUtilsKt",
+                "com.xiaomi.fitness.common.utils.VersionUtils",
+                "com.xiaomi.fitness.common.utils.VersionUtilsKt",
+                "com.xiaomi.fitness.common.utils.RomUtils",
+                "com.xiaomi.fitness.common.utils.RomUtilsKt",
+                "com.xiaomi.fitness.common.utils.AndroidVersionKt",
+                "com.xiaomi.fitness.common.utils.AndroidVersion",
+                "com.xiaomi.wearable.utils.SystemUtils",
+                "com.xiaomi.wearable.utils.VersionUtils",
+                "com.xiaomi.wearable.common.utils.SystemUtils",
+                "com.mi.health.utils.SystemUtils",
         };
-        for (String name : candidates) {
+
+        // Method name patterns that indicate version gate
+        String[] gatePatterns = {"isabove", "android15", "iszenmode", "issupport", "zenmodesupport"};
+
+        for (String className : classNames) {
             try {
-                Class<?> c = cl.loadClass(name);
-                XposedBridge.log(TAG + ": " + s("扫描发现类: ", "Scan found class: ") + name);
-                for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
-                    XposedBridge.log(TAG + ":   " + m.getName()
-                            + " ret=" + m.getReturnType().getSimpleName());
-                    // Hook any boolean method that might control zen mode
-                    if (m.getReturnType() == boolean.class
-                            && java.lang.reflect.Modifier.isStatic(m.getModifiers())) {
-                        String mName = m.getName().toLowerCase();
-                        if (mName.contains("zen") || mName.contains("support") || mName.contains("dnd")) {
+                Class<?> c = cl.loadClass(className);
+                for (Method m : c.getDeclaredMethods()) {
+                    if (m.getReturnType() != boolean.class) continue;
+                    String lname = m.getName().toLowerCase();
+                    for (String pattern : gatePatterns) {
+                        if (lname.contains(pattern)) {
                             XposedBridge.hookMethod(m, new XC_MethodHook() {
                                 @Override
                                 protected void beforeHookedMethod(MethodHookParam param) {
-                                    param.setResult(true);
+                                    // isAboveAndroid15 → false; isSupportZenMode → true
+                                    boolean val = !lname.contains("above");
+                                    param.setResult(val);
                                 }
                             });
-                            XposedBridge.log(TAG + ": " + s("已扫描并 Hook: ",
-                                    "Scan-hooked: ") + name + "." + m.getName() + " → true");
+                            found = true;
+                            XposedBridge.log(TAG + ": " + s(
+                                    "已 Hook 版本检查 " + className + "." + m.getName() + " → " + !lname.contains("above"),
+                                    "Hooked version gate " + className + "." + m.getName() + " → " + !lname.contains("above")));
                         }
                     }
                 }
-            } catch (ClassNotFoundException ignored) {}
-            catch (Throwable t) {
-                XposedBridge.log(TAG + ": " + s("扫描异常: ", "Scan error: ") + t);
+            } catch (ClassNotFoundException ignored) {
+            } catch (Throwable t) {
+                XposedBridge.log(TAG + ": " + s("扫描异常: ", "Scan error: ") + className + " → " + t);
             }
         }
+        return found;
     }
 
     /**
-     * Hook NotificationManager.isNotificationPolicyAccessGranted() → true.
+     * Hook handleDeviceSettingDND: temporarily set Build.VERSION.SDK_INT to 34
+     * while the method runs, so any inlined "SDK_INT >= 35" check returns false.
+     * This is the nuclear option that works even when isSupportZenMode is fully inlined.
      */
+    private static void hookHandleDeviceSettingDND(ClassLoader cl) {
+        try {
+            Class<?> zenUtilsKt = cl.loadClass(
+                    "com.xiaomi.fitness.devicesettings.utils.ZenUtilsKt");
+
+            Method target = null;
+            for (Method m : zenUtilsKt.getDeclaredMethods()) {
+                if ("handleDeviceSettingDND".equals(m.getName())) {
+                    target = m;
+                    break;
+                }
+            }
+            if (target == null) {
+                XposedBridge.log(TAG + ": " + s(
+                        "handleDeviceSettingDND 未找到",
+                        "handleDeviceSettingDND not found"));
+                return;
+            }
+
+            XposedBridge.hookMethod(target, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        Field sdkInt = Build.VERSION.class.getField("SDK_INT");
+                        sdkInt.setAccessible(true);
+                        // Save original and spoof
+                        param.setObjectExtra("original_sdk", Build.VERSION.SDK_INT);
+                        XposedHelpers.setStaticIntField(Build.VERSION.class, "SDK_INT", 34);
+                        XposedBridge.log(TAG + ": handleDeviceSettingDND → " + s(
+                                "已将 SDK_INT 临时改为 34", "SDK_INT temporarily spoofed to 34"));
+                    } catch (Throwable t) {
+                        XposedBridge.log(TAG + ": " + s("SDK_INT 改写失败: ",
+                                "SDK_INT spoof failed: ") + t);
+                    }
+                }
+
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        Object orig = param.getObjectExtra("original_sdk");
+                        int origVal = orig instanceof Integer ? (int) orig : 35;
+                        XposedHelpers.setStaticIntField(Build.VERSION.class, "SDK_INT", origVal);
+                    } catch (Throwable t) {
+                        // Ensure SDK_INT is always restored
+                        try {
+                            XposedHelpers.setStaticIntField(Build.VERSION.class, "SDK_INT", 35);
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            });
+            XposedBridge.log(TAG + ": " + s(
+                    "已 Hook handleDeviceSettingDND (SDK_INT 改写模式)",
+                    "Hooked handleDeviceSettingDND (SDK_INT spoof mode)"));
+
+            // Also hook handleDeviceSetQuietMode with same strategy
+            for (Method m : zenUtilsKt.getDeclaredMethods()) {
+                if ("handleDeviceSetQuietMode".equals(m.getName())) {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            try {
+                                param.setObjectExtra("original_sdk", Build.VERSION.SDK_INT);
+                                XposedHelpers.setStaticIntField(Build.VERSION.class, "SDK_INT", 34);
+                            } catch (Throwable ignored) {}
+                        }
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                Object orig = param.getObjectExtra("original_sdk");
+                                int origVal = orig instanceof Integer ? (int) orig : 35;
+                                XposedHelpers.setStaticIntField(Build.VERSION.class, "SDK_INT", origVal);
+                            } catch (Throwable ignored) {
+                                try { XposedHelpers.setStaticIntField(Build.VERSION.class, "SDK_INT", 35); }
+                                catch (Throwable ignored2) {}
+                            }
+                        }
+                    });
+                    XposedBridge.log(TAG + ": " + s(
+                            "已 Hook handleDeviceSetQuietMode (SDK_INT 改写模式)",
+                            "Hooked handleDeviceSetQuietMode (SDK_INT spoof mode)"));
+                    break;
+                }
+            }
+        } catch (Throwable t) {
+            XposedBridge.log(TAG + ": " + s("Hook handleDeviceSettingDND 异常: ",
+                    "handleDeviceSettingDND hook error: ") + t);
+        }
+    }
+
+    // ─── 权限欺骗 ────────────────────────────────────────────────────
+
     private static void hookIsNotificationPolicyAccessGranted() {
         try {
             XposedHelpers.findAndHookMethod(
@@ -157,10 +248,8 @@ public final class DndHook {
         }
     }
 
-    /**
-     * Hook NotificationManager.setInterruptionFilter() → execute DND via root.
-     * root 命令直接在 Hook 进程内执行，无需跨进程桥接。
-     */
+    // ─── DND 命令拦截 ─────────────────────────────────────────────────
+
     private static void hookSetInterruptionFilter() {
         try {
             XposedHelpers.findAndHookMethod(
@@ -174,15 +263,13 @@ public final class DndHook {
                             int zen = filterToZen(filter);
                             if (zen < 0) return;
 
-                            // Execute DND change via root shell directly in this process
                             boolean ok = setZenViaRoot(zen);
                             if (ok) {
-                                param.setResult(null); // skip original
+                                param.setResult(null);
                                 XposedBridge.log(TAG + ": " + s(
                                         "已通过 root 设置 DND: zen=" + zen,
                                         "Set DND via root: zen=" + zen));
                             } else {
-                                // Let the original method try (may fail silently on SDK 35)
                                 XposedBridge.log(TAG + ": " + s(
                                         "root 执行失败，回退到原始方法",
                                         "Root failed, falling back to original method"));
@@ -199,32 +286,26 @@ public final class DndHook {
         }
     }
 
-    /**
-     * Execute DND change via root shell directly.
-     * Runs 'cmd notification set_zen_mode <mode>' or 'settings put global zen_mode <zen>'.
-     */
+    // ─── Root 命令 ────────────────────────────────────────────────────
+
     private static boolean setZenViaRoot(int zen) {
         try {
-            String cmdName = zenToCmd(zen);
-            // Try the notification command first
             Process p = Runtime.getRuntime().exec(new String[]{"su", "-c",
-                    "cmd notification set_zen_mode " + cmdName});
+                    "cmd notification set_zen_mode " + zenToCmd(zen)});
             int exit = p.waitFor();
             if (exit == 0) return true;
 
-            // Fallback to settings command
             Process p2 = Runtime.getRuntime().exec(new String[]{"su", "-c",
                     "settings put global zen_mode " + zen});
-            int exit2 = p2.waitFor();
-            return exit2 == 0;
+            return p2.waitFor() == 0;
         } catch (Throwable t) {
-            XposedBridge.log(TAG + ": " + s("root 命令执行异常: ",
-                    "Root command error: ") + t);
+            XposedBridge.log(TAG + ": " + s("root 命令异常: ", "Root cmd error: ") + t);
             return false;
         }
     }
 
-    /** Map NotificationManager interruption filter to zen_mode int. */
+    // ─── 工具方法 ─────────────────────────────────────────────────────
+
     private static int filterToZen(int filter) {
         switch (filter) {
             case NotificationManager.INTERRUPTION_FILTER_ALL: return 0;
@@ -235,7 +316,6 @@ public final class DndHook {
         }
     }
 
-    /** Map zen int to cmd string. */
     private static String zenToCmd(int zen) {
         switch (zen) {
             case 0: return "off";
