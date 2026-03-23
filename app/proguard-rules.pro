@@ -2,6 +2,7 @@
 -keep class io.github.mihealthamapfix.ModernEntry { *; }
 -keep class io.github.mihealthamapfix.ModernEntry$IsMipmapHooker { *; }
 -keep class io.github.mihealthamapfix.LegacyInit { *; }
+-keep class io.github.mihealthamapfix.DndHook { *; }
 
 # 保留 libxposed Hooker 的静态回调方法签名（before/after）
 -keepclassmembers class * implements io.github.libxposed.api.XposedInterface$Hooker {
@@ -27,3 +28,4 @@
 
 # Keep Shizuku API classes to avoid aggressive shrinking causing bind issues
 -keep class rikka.shizuku.** { *; }
+

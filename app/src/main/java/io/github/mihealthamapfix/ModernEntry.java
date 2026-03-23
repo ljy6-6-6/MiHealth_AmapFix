@@ -83,6 +83,9 @@ try {
         } catch (Throwable t) {
             log("MiHealthAmapFix: method not found; maybe old version. " + t);
         }
+
+        // DND sync fix for Android 15+ (SDK 35)
+        DndHook.install(param.getClassLoader());
     }
 
     /** Hooker for the modern API. */

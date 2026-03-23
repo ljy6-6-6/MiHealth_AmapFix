@@ -47,5 +47,8 @@ public class LegacyInit implements IXposedHookLoadPackage {
         } catch (Throwable t) {
             // Method may not exist on older versions; ignore
         }
+
+        // DND sync fix for Android 15+ (SDK 35)
+        DndHook.install(lpparam.classLoader);
     }
 }
