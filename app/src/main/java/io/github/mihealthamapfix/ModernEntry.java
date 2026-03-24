@@ -2,13 +2,16 @@ package io.github.mihealthamapfix;
 
 import android.service.notification.StatusBarNotification;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
 
+import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.XC_MethodHook;
 
 import static io.github.mihealthamapfix.HookConstants.AMAP_NAV_ID;
 import static io.github.mihealthamapfix.HookConstants.AMAP_PACKAGE;
@@ -16,61 +19,113 @@ import static io.github.mihealthamapfix.HookConstants.TARGET_PACKAGES;
 import static io.github.mihealthamapfix.util.L.s;
 
 /**
- * Modern LSPosed entry — works on both API 100 and API 101 frameworks.
+ * Universal modern entry for API 100 and API 101 style runtimes.
  * <p>
- * API 100: framework calls the 2-arg constructor (XposedInterface, ModuleLoadedParam).
- * API 101: framework calls the no-arg constructor, then attachFramework().
- * <p>
- * Actual hooking uses legacy XposedBridge/XposedHelpers API for maximum compatibility.
+ * Actual business hooks still use XposedBridge/XposedHelpers for maximum
+ * compatibility with the already-working hook implementation.
  */
 public class ModernEntry extends XposedModule {
 
     private static final String TAG = "AmapFix";
+    private static final Set<String> INSTALLED = ConcurrentHashMap.newKeySet();
 
-    /** API 101: no-arg constructor. */
+    private volatile int frameworkApiVersion = -1;
+    private volatile String processName = "unknown";
+
     public ModernEntry() {
         super();
     }
 
-    /** API 100: 2-arg constructor. */
     public ModernEntry(XposedInterface base, XposedModuleInterface.ModuleLoadedParam param) {
         super(base, param);
+        rememberModuleLoaded(param);
+    }
+
+    @Override
+    public void onModuleLoaded(XposedModuleInterface.ModuleLoadedParam param) {
+        rememberModuleLoaded(param);
     }
 
     @Override
     public void onPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
         String pkg = param.getPackageName();
-        if (!TARGET_PACKAGES.contains(pkg)) return;
+        if (!TARGET_PACKAGES.contains(pkg)) {
+            return;
+        }
 
-        ClassLoader cl = getClassLoaderCompat(param);
+        if (shouldWaitForPackageReady()) {
+            XposedBridge.log(TAG + ": " + s(
+                    "已命中 Modern onPackageLoaded，等待 onPackageReady 再安装 Hook，包名=",
+                    "Modern onPackageLoaded hit, waiting for onPackageReady before installing hooks, package=") + pkg);
+            return;
+        }
+
+        installForPackage(pkg, getClassLoaderCompat(param), "onPackageLoaded");
+    }
+
+    @Override
+    public void onPackageReady(XposedModuleInterface.PackageReadyParam param) {
+        String pkg = param.getPackageName();
+        if (!TARGET_PACKAGES.contains(pkg)) {
+            return;
+        }
+
+        installForPackage(pkg, getClassLoaderCompat(param), "onPackageReady");
+    }
+
+    private void rememberModuleLoaded(XposedModuleInterface.ModuleLoadedParam param) {
+        if (param == null) {
+            return;
+        }
+
+        processName = safeProcessName(param);
+        frameworkApiVersion = safeApiVersion();
+
+        XposedBridge.log(TAG + ": " + s(
+                "Modern 入口已附加，进程=",
+                "Modern entry attached, process=") + processName
+                + ", framework=" + safeFrameworkName()
+                + "(" + safeFrameworkVersionCode() + ")"
+                + ", api=" + describeApiVersion());
+    }
+
+    private boolean shouldWaitForPackageReady() {
+        return frameworkApiVersion >= 101;
+    }
+
+    private void installForPackage(String pkg, ClassLoader cl, String source) {
         if (cl == null) {
-            XposedBridge.log(TAG + ": " + s("无法获取 ClassLoader", "Cannot get ClassLoader"));
+            XposedBridge.log(TAG + ": " + s(
+                    "无法获取 ClassLoader，来源=",
+                    "Cannot get ClassLoader, source=") + source + ", package=" + pkg);
+            return;
+        }
+
+        String key = processName + "|" + pkg + "|" + System.identityHashCode(cl);
+        if (!INSTALLED.add(key)) {
+            XposedBridge.log(TAG + ": " + s(
+                    "跳过重复安装，来源=",
+                    "Skipping duplicate install, source=") + source + ", package=" + pkg);
             return;
         }
 
         hookNotificationFilter(cl);
         DndHook.install(cl);
+        XposedBridge.log(TAG + ": " + s(
+                "已通过 Modern 入口安装 Hook，来源=",
+                "Installed hooks through modern entry, source=") + source + ", package=" + pkg);
     }
 
-    /**
-     * Compatible classloader accessor.
-     * API 100 has getClassLoader(), API 101 has getDefaultClassLoader().
-     */
     private static ClassLoader getClassLoaderCompat(XposedModuleInterface.PackageLoadedParam param) {
-        // Try API 101 first
-        try {
-            return param.getDefaultClassLoader();
-        } catch (Throwable ignored) {}
-        // Fallback to API 100
         try {
             return param.getClassLoader();
+        } catch (Throwable ignored) {}
+        try {
+            return param.getDefaultClassLoader();
         } catch (Throwable ignored) {}
         return null;
     }
 
-    /**
-     * Hook NotificationFilterHelper.isMipmapNotification using legacy XposedBridge API.
-     */
     private void hookNotificationFilter(ClassLoader cl) {
         try {
             XposedHelpers.findAndHookMethod(
@@ -93,12 +148,50 @@ public class ModernEntry extends XposedModule {
                     }
             );
             XposedBridge.log(TAG + ": " + s(
-                    "已 Hook isMipmapNotification (Modern入口)",
+                    "已 Hook isMipmapNotification (Modern 入口)",
                     "Hooked isMipmapNotification (Modern entry)"));
         } catch (Throwable t) {
             XposedBridge.log(TAG + ": " + s(
                     "isMipmapNotification 未找到，可能是旧版 APP: ",
                     "isMipmapNotification not found, maybe old app version: ") + t);
+        }
+    }
+
+    private int safeApiVersion() {
+        try {
+            return getApiVersion();
+        } catch (Throwable ignored) {
+            return -1;
+        }
+    }
+
+    private String describeApiVersion() {
+        return frameworkApiVersion > 0 ? String.valueOf(frameworkApiVersion) : "unknown";
+    }
+
+    private String safeFrameworkName() {
+        try {
+            String name = getFrameworkName();
+            return name == null || name.isEmpty() ? "unknown" : name;
+        } catch (Throwable ignored) {
+            return "unknown";
+        }
+    }
+
+    private long safeFrameworkVersionCode() {
+        try {
+            return getFrameworkVersionCode();
+        } catch (Throwable ignored) {
+            return -1L;
+        }
+    }
+
+    private static String safeProcessName(XposedModuleInterface.ModuleLoadedParam param) {
+        try {
+            String name = param.getProcessName();
+            return name == null || name.isEmpty() ? "unknown" : name;
+        } catch (Throwable ignored) {
+            return "unknown";
         }
     }
 }

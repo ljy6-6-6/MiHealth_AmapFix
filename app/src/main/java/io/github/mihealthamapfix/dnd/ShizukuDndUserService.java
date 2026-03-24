@@ -5,6 +5,8 @@ import android.os.Build;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
+import static io.github.mihealthamapfix.util.L.s;
+
 /**
  * Shizuku UserService implementation.
  *
@@ -12,33 +14,39 @@ import java.io.InputStreamReader;
  */
 public class ShizukuDndUserService extends IShizukuDndService.Stub {
 
-    private volatile String status = "shizuku(usersvc): ready";
+    private volatile String status = s("Shizuku 用户服务：已就绪", "Shizuku user service: ready");
 
     @Override
     public void destroy() {
-        // Shizuku will call this (transaction code 16777114) when starting a new version or when requested.
         System.exit(0);
     }
 
     @Override
     public void setZenMode(int mode) {
         if (Build.VERSION.SDK_INT < 26) {
-            status = "shizuku(usersvc): sdk<26";
+            status = s("Shizuku 用户服务：SDK < 26", "Shizuku user service: sdk<26");
             return;
         }
+
         try {
-            String cmd1 = "cmd notification set_zen_mode " + DndUtils.zenToCmd(mode);
-            int code = runShell(cmd1);
-            if (code != 0) {
-                code = runShell("settings put global zen_mode " + mode);
-                if (code != 0) {
-                    status = "shizuku(usersvc): set failed";
-                    return;
-                }
+            runShell("cmd notification set_zen_mode " + DndUtils.zenToCmd(mode));
+            if (verifyZen(mode)) {
+                status = s("Shizuku 用户服务：已设置 zen=", "Shizuku user service: set zen=") + mode;
+                return;
             }
-            status = "shizuku(usersvc): set zen=" + mode;
+
+            runShell("settings put global zen_mode " + mode);
+            int actual = getZenMode();
+            if (actual != mode) {
+                status = s("Shizuku 用户服务：校验失败，期望=", "Shizuku user service: verification failed, expected=")
+                        + mode + s("，实际=", ", actual=") + actual;
+                return;
+            }
+
+            status = s("Shizuku 用户服务：已设置 zen=", "Shizuku user service: set zen=") + mode;
         } catch (Throwable t) {
-            status = "shizuku(usersvc): set error " + t.getClass().getSimpleName();
+            status = s("Shizuku 用户服务：写入失败 ", "Shizuku user service: set failed ")
+                    + t.getClass().getSimpleName();
         }
     }
 
@@ -48,10 +56,10 @@ public class ShizukuDndUserService extends IShizukuDndService.Stub {
         try {
             String out = runShellReadLine("settings get global zen_mode");
             if (out == null) return -1;
-            out = out.trim();
-            return Integer.parseInt(out);
+            return Integer.parseInt(out.trim());
         } catch (Throwable t) {
-            status = "shizuku(usersvc): get error " + t.getClass().getSimpleName();
+            status = s("Shizuku 用户服务：读取失败 ", "Shizuku user service: read failed ")
+                    + t.getClass().getSimpleName();
             return -1;
         }
     }
@@ -66,17 +74,21 @@ public class ShizukuDndUserService extends IShizukuDndService.Stub {
         return status;
     }
 
+    private boolean verifyZen(int expected) {
+        return getZenMode() == expected;
+    }
+
     private int runShell(String cmd) throws Exception {
-        Process p = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
-        return p.waitFor();
+        Process process = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
+        return process.waitFor();
     }
 
     private String runShellReadLine(String cmd) throws Exception {
-        Process p = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
-        BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-        String line = br.readLine();
-        br.close();
-        p.waitFor();
+        Process process = Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String line = reader.readLine();
+        reader.close();
+        process.waitFor();
         return line;
     }
 }

@@ -49,6 +49,25 @@ jobs:
       - name: Build Release APK
         run: ./gradlew --no-daemon assembleRelease
 
+      - name: Verify Xposed metadata in APK
+        run: |
+          set -euo pipefail
+          APK=$(ls app/build/outputs/apk/release/*-unsigned.apk | head -n1)
+          echo "Inspecting $APK"
+
+          for entry in \
+            "META-INF/xposed/java_init.list" \
+            "META-INF/xposed/module.prop" \
+            "META-INF/xposed/scope.list" \
+            "assets/xposed_init"; do
+            unzip -l "$APK" | grep -Fq "$entry"
+          done
+
+          unzip -p "$APK" META-INF/xposed/java_init.list | tr -d '\r' | grep -Fx "io.github.mihealthamapfix.ModernEntry"
+          unzip -p "$APK" META-INF/xposed/module.prop | tr -d '\r' | grep -Fx "minApiVersion=100"
+          unzip -p "$APK" META-INF/xposed/module.prop | tr -d '\r' | grep -Fx "targetApiVersion=101"
+          unzip -p "$APK" META-INF/xposed/module.prop | tr -d '\r' | grep -Fx "staticScope=true"
+
       - name: List APK outputs (debug)
         run: ls -lah app/build/outputs/apk/release || true
 

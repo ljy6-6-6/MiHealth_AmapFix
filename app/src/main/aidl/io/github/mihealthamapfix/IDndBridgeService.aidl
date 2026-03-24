@@ -6,6 +6,7 @@ package io.github.mihealthamapfix;
 interface IDndBridgeService {
     void setZenMode(int mode);
     int getZenMode();
+    int getCapabilityMode();
     boolean isActive();
     String getStatus();
 }

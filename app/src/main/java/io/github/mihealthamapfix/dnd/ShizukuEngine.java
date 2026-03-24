@@ -2,149 +2,240 @@ package io.github.mihealthamapfix.dnd;
 
 import android.content.ComponentName;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.github.mihealthamapfix.util.AppCtx;
 import rikka.shizuku.Shizuku;
 
+import static io.github.mihealthamapfix.util.L.s;
+
 /**
- * DND engine backed by Shizuku.
- *
- * Shizuku v13 makes Shizuku#newProcess inaccessible, so we run commands through a Shizuku UserService instead.
+ * Experimental module-side DND engine backed by a Shizuku UserService.
  */
 public class ShizukuEngine implements DndEngine {
+    private static final String TAG = "AmapFix-DND";
+    private static final String MODULE_PACKAGE = "io.github.mihealthamapfix";
+    private static final ComponentName USER_SERVICE_COMPONENT = new ComponentName(
+            MODULE_PACKAGE,
+            "io.github.mihealthamapfix.dnd.ShizukuDndUserService");
 
-    private static final String PKG = "io.github.mihealthamapfix";
+    private static final AtomicReference<IShizukuDndService> SERVICE = new AtomicReference<>();
+    private static final AtomicReference<ServiceConnection> CONNECTION = new AtomicReference<>();
+    private static final AtomicReference<CountDownLatch> BIND_LATCH = new AtomicReference<>();
+    private static final AtomicBoolean BINDING = new AtomicBoolean(false);
 
-    private final Object lock = new Object();
-    private volatile String status = "shizuku: not initialized";
+    private volatile String status = s("Shizuku：未初始化", "Shizuku: not initialized");
 
-    private final AtomicReference<IShizukuDndService> svcRef = new AtomicReference<>();
-
-    private final Shizuku.UserServiceArgs userServiceArgs =
-            new Shizuku.UserServiceArgs(new ComponentName(PKG, ShizukuDndUserService.class.getName()))
-                    .daemon(true)
-                    .processNameSuffix("dnd")
-                    .debuggable(false)
-                    .version(1);
-
-    private volatile ServiceConnection serviceConnection;
+    static Probe probeAccess() {
+        try {
+            if (Build.VERSION.SDK_INT < 26) {
+                return new Probe(false, s("Shizuku：SDK < 26", "Shizuku: sdk<26"));
+            }
+            if (!Shizuku.pingBinder()) {
+                return new Probe(false, s("Shizuku：binder 不可用", "Shizuku: binder unavailable"));
+            }
+            if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                return new Probe(false, s("Shizuku：权限未授予", "Shizuku: permission not granted"));
+            }
+            return new Probe(true, s("Shizuku：权限已授予", "Shizuku: permission granted"));
+        } catch (Throwable t) {
+            return new Probe(false, s("Shizuku：检查失败 ", "Shizuku: check failed ")
+                    + simpleName(t));
+        }
+    }
 
     @Override
     public boolean isActive() {
+        Probe probe = probeAccess();
+        if (!probe.granted()) {
+            clearService(probe.detail());
+            status = probe.detail();
+            return false;
+        }
+
         try {
-            if (Build.VERSION.SDK_INT < 26) return false;
-            if (!Shizuku.pingBinder()) {
-                status = "shizuku: binder not available";
+            IShizukuDndService service = ensureService(1500L);
+            if (service == null) {
                 return false;
             }
-            if (Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                status = "shizuku: permission not granted";
-                return false;
+            boolean alive = service.ping();
+            status = alive
+                    ? s("Shizuku：用户服务已连接", "Shizuku: user service connected")
+                    : s("Shizuku：用户服务未响应", "Shizuku: user service not responding");
+            if (!alive) {
+                clearService(status);
             }
-            ensureConnected(800);
-            IShizukuDndService s = svcRef.get();
-            if (s == null) {
-                status = "shizuku: user service not connected";
-                return false;
-            }
-            try {
-                if (!s.ping()) {
-                    status = "shizuku: user service ping failed";
-                    return false;
-                }
-            } catch (Throwable ignored) {
-                // Treat remote exceptions as inactive.
-                svcRef.set(null);
-                status = "shizuku: user service dead";
-                return false;
-            }
-            status = "shizuku: ready";
-            return true;
+            return alive;
         } catch (Throwable t) {
-            status = "shizuku: " + t.getClass().getSimpleName();
+            status = s("Shizuku：检查失败 ", "Shizuku: check failed ") + simpleName(t);
+            clearService(status);
             return false;
         }
     }
 
     @Override
     public String getStatus() {
-        IShizukuDndService s = svcRef.get();
-        if (s != null) {
-            try {
-                String remote = s.getStatus();
-                if (remote != null && !remote.isEmpty()) return remote;
-            } catch (Throwable ignored) {
-                // ignore
-            }
-        }
         return status;
     }
 
     @Override
     public void setZen(int zen) throws Exception {
-        ensureConnected(1200);
-        IShizukuDndService s = svcRef.get();
-        if (s == null) throw new IllegalStateException("shizuku: user service not connected");
-        s.setZenMode(zen);
+        IShizukuDndService service = ensureService(1500L);
+        if (service == null) {
+            throw new IllegalStateException(status);
+        }
+        try {
+            service.setZenMode(zen);
+            status = s("Shizuku：已通过用户服务请求设置 zen=", "Shizuku: requested zen via user service=") + zen;
+        } catch (Throwable t) {
+            status = s("Shizuku：写入失败 ", "Shizuku: set failed ") + simpleName(t);
+            clearService(status);
+            if (t instanceof Exception) {
+                throw (Exception) t;
+            }
+            throw new IllegalStateException(status, t);
+        }
     }
 
     @Override
     public int getZen() {
         try {
-            ensureConnected(1200);
-            IShizukuDndService s = svcRef.get();
-            if (s == null) return -1;
-            return s.getZenMode();
+            IShizukuDndService service = ensureService(1500L);
+            if (service == null) {
+                return -1;
+            }
+            return service.getZenMode();
         } catch (Throwable t) {
-            status = "shizuku: get failed " + t.getClass().getSimpleName();
+            status = s("Shizuku：读取失败 ", "Shizuku: read failed ") + simpleName(t);
+            clearService(status);
             return -1;
         }
     }
 
-    private void ensureConnected(long timeoutMs) {
-        if (svcRef.get() != null) return;
+    private IShizukuDndService ensureService(long timeoutMs) {
+        IShizukuDndService current = SERVICE.get();
+        if (current != null) {
+            return current;
+        }
 
-        synchronized (lock) {
-            if (svcRef.get() != null) return;
-            if (serviceConnection != null) return; // already binding/bound
+        Probe probe = probeAccess();
+        if (!probe.granted()) {
+            status = probe.detail();
+            clearService(status);
+            return null;
+        }
 
-            final CountDownLatch latch = new CountDownLatch(1);
-            serviceConnection = new ServiceConnection() {
+        if (BINDING.compareAndSet(false, true)) {
+            CountDownLatch latch = new CountDownLatch(1);
+            BIND_LATCH.set(latch);
+            status = s("Shizuku：正在绑定用户服务", "Shizuku: binding user service");
+
+            ServiceConnection connection = new ServiceConnection() {
                 @Override
                 public void onServiceConnected(ComponentName name, IBinder service) {
-                    svcRef.set(IShizukuDndService.Stub.asInterface(service));
-                    status = "shizuku: user service connected";
+                    IShizukuDndService remote = IShizukuDndService.Stub.asInterface(service);
+                    if (remote == null) {
+                        clearService(s("Shizuku：用户服务返回空 Binder", "Shizuku: user service returned a null binder"));
+                        return;
+                    }
+                    SERVICE.set(remote);
+                    status = s("Shizuku：用户服务已连接", "Shizuku: user service connected");
+                    BINDING.set(false);
+                    BIND_LATCH.set(null);
                     latch.countDown();
+                    Log.i(TAG, s("Shizuku 用户服务已连接", "Shizuku user service connected"));
                 }
 
                 @Override
                 public void onServiceDisconnected(ComponentName name) {
-                    svcRef.set(null);
-                    status = "shizuku: user service disconnected";
+                    clearService(s("Shizuku：用户服务已断开", "Shizuku: user service disconnected"));
+                }
+
+                @Override
+                public void onBindingDied(ComponentName name) {
+                    clearService(s("Shizuku：用户服务绑定已失效", "Shizuku: user service binding died"));
+                }
+
+                @Override
+                public void onNullBinding(ComponentName name) {
+                    clearService(s("Shizuku：用户服务返回空绑定", "Shizuku: user service returned a null binding"));
                 }
             };
+            CONNECTION.set(connection);
 
             try {
-                Shizuku.bindUserService(userServiceArgs, serviceConnection);
+                Shizuku.bindUserService(buildUserServiceArgs(), connection);
             } catch (Throwable t) {
-                status = "shizuku: bind failed " + t.getClass().getSimpleName();
-                serviceConnection = null;
-                return;
+                status = s("Shizuku：绑定用户服务失败 ", "Shizuku: user service bind failed ")
+                        + simpleName(t);
+                clearService(status);
             }
+        }
 
+        CountDownLatch latch = BIND_LATCH.get();
+        if (latch != null && timeoutMs > 0 && SERVICE.get() == null) {
             try {
-                // Wait a bit for the async connection, so the first call doesn't just fail immediately.
                 latch.await(timeoutMs, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+        }
+        return SERVICE.get();
+    }
 
-            // If bind didn't connect in time, leave it; later calls will still benefit once connected.
+    private static void clearService(String ignoredStatus) {
+        SERVICE.set(null);
+        CONNECTION.set(null);
+        BINDING.set(false);
+        CountDownLatch latch = BIND_LATCH.getAndSet(null);
+        if (latch != null) {
+            latch.countDown();
+        }
+    }
+
+    private static String simpleName(Throwable t) {
+        return t == null ? "unknown" : t.getClass().getSimpleName();
+    }
+
+    private static Shizuku.UserServiceArgs buildUserServiceArgs() {
+        int version = 1;
+        try {
+            if (AppCtx.app() != null) {
+                version = AppCtx.app().getPackageManager()
+                        .getPackageInfo(MODULE_PACKAGE, 0).versionCode;
+            }
+        } catch (Throwable ignored) {
+        }
+        return new Shizuku.UserServiceArgs(USER_SERVICE_COMPONENT)
+                .tag("mihealthamapfix-dnd")
+                .version(version)
+                .debuggable(false)
+                .processNameSuffix("dnd");
+    }
+
+    static final class Probe {
+        private final boolean granted;
+        private final String detail;
+
+        Probe(boolean granted, String detail) {
+            this.granted = granted;
+            this.detail = detail;
+        }
+
+        boolean granted() {
+            return granted;
+        }
+
+        String detail() {
+            return detail;
         }
     }
 }

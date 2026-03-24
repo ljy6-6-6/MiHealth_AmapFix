@@ -1,19 +1,25 @@
-# 让 LSPosed 能通过类名加载到入口（名字不能被混淆/删除）
--keep class io.github.mihealthamapfix.ModernEntry { *; }
+-adaptresourcefilecontents META-INF/xposed/java_init.list
+
+# LSPosed must be able to resolve both modern and legacy entries by class name.
+-keep class io.github.mihealthamapfix.ModernEntry {
+    public <init>();
+    public <init>(...);
+    public void onModuleLoaded(...);
+    public void onPackageLoaded(...);
+    public void onPackageReady(...);
+}
 -keep class io.github.mihealthamapfix.LegacyInit { *; }
 -keep class io.github.mihealthamapfix.DndHook { *; }
 
-# runtime 由 LSPosed 提供 libxposed，实现不存在于 APK 内，避免警告
+# Runtime libxposed implementations come from the framework, not from this APK.
 -dontwarn io.github.libxposed.api.**
 
-# ----------------------------
-# Shizuku UserService
-# ----------------------------
+# Shizuku user service
 -keep class io.github.mihealthamapfix.dnd.ShizukuDndUserService { *; }
 -keep class io.github.mihealthamapfix.dnd.IShizukuDndService** { *; }
 
-# Keep bridge AIDL (跨进程 Binder)
+# Bridge AIDL
 -keep class io.github.mihealthamapfix.IDndBridgeService** { *; }
 
-# Keep Shizuku API classes
+# Shizuku API classes
 -keep class rikka.shizuku.** { *; }

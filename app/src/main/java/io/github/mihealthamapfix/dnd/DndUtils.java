@@ -27,4 +27,15 @@ public final class DndUtils {
             default: return "off";
         }
     }
+
+    /** Map zen int to NotificationManager interruption filter. */
+    public static int zenToFilter(int zen) {
+        switch (zen) {
+            case 0: return NotificationManager.INTERRUPTION_FILTER_ALL;
+            case 1: return NotificationManager.INTERRUPTION_FILTER_PRIORITY;
+            case 2: return NotificationManager.INTERRUPTION_FILTER_NONE;
+            case 3: return NotificationManager.INTERRUPTION_FILTER_ALARMS;
+            default: return -1;
+        }
+    }
 }
