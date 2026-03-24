@@ -2,114 +2,196 @@ package io.github.mihealthamapfix;
 
 import android.service.notification.StatusBarNotification;
 
-import java.lang.reflect.Method;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import io.github.libxposed.api.XposedModuleInterface;
+
+import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
-import de.robv.android.xposed.XC_MethodHook;
 
-
-import io.github.libxposed.api.annotations.XposedHooker;
 import static io.github.mihealthamapfix.HookConstants.AMAP_NAV_ID;
 import static io.github.mihealthamapfix.HookConstants.AMAP_PACKAGE;
 import static io.github.mihealthamapfix.HookConstants.TARGET_PACKAGES;
+import static io.github.mihealthamapfix.util.L.s;
 
 /**
- * Modern LSPosed (libxposed API 100) entry.
- * Hooks NotificationFilterHelper#isMipmapNotification(StatusBarNotification)
- * and forces it to return false for Amap's navigation notification only.
+ * Universal modern entry for API 100 and API 101 style runtimes.
+ * <p>
+ * Actual business hooks still use XposedBridge/XposedHelpers for maximum
+ * compatibility with the already-working hook implementation.
  */
 public class ModernEntry extends XposedModule {
 
+    private static final String TAG = "AmapFix";
+    private static final Set<String> INSTALLED = ConcurrentHashMap.newKeySet();
+
+    private volatile int frameworkApiVersion = -1;
+    private volatile String processName = "unknown";
+
+    public ModernEntry() {
+        super();
+    }
+
     public ModernEntry(XposedInterface base, XposedModuleInterface.ModuleLoadedParam param) {
         super(base, param);
+        rememberModuleLoaded(param);
+    }
+
+    @Override
+    public void onModuleLoaded(XposedModuleInterface.ModuleLoadedParam param) {
+        rememberModuleLoaded(param);
     }
 
     @Override
     public void onPackageLoaded(XposedModuleInterface.PackageLoadedParam param) {
         String pkg = param.getPackageName();
-        // 仅在小米运动健康相关包内工作
-        Set<String> targets = TARGET_PACKAGES;
-        if (!targets.contains(pkg)) {
+        if (!TARGET_PACKAGES.contains(pkg)) {
             return;
         }
+
+        if (shouldWaitForPackageReady()) {
+            XposedBridge.log(TAG + ": " + s(
+                    "已命中 Modern onPackageLoaded，等待 onPackageReady 再安装 Hook，包名=",
+                    "Modern onPackageLoaded hit, waiting for onPackageReady before installing hooks, package=") + pkg);
+            return;
+        }
+
+        installForPackage(pkg, getClassLoaderCompat(param), "onPackageLoaded");
+    }
+
+    @Override
+    public void onPackageReady(XposedModuleInterface.PackageReadyParam param) {
+        String pkg = param.getPackageName();
+        if (!TARGET_PACKAGES.contains(pkg)) {
+            return;
+        }
+
+        installForPackage(pkg, getClassLoaderCompat(param), "onPackageReady");
+    }
+
+    private void rememberModuleLoaded(XposedModuleInterface.ModuleLoadedParam param) {
+        if (param == null) {
+            return;
+        }
+
+        processName = safeProcessName(param);
+        frameworkApiVersion = safeApiVersion();
+
+        XposedBridge.log(TAG + ": " + s(
+                "Modern 入口已附加，进程=",
+                "Modern entry attached, process=") + processName
+                + ", framework=" + safeFrameworkName()
+                + "(" + safeFrameworkVersionCode() + ")"
+                + ", api=" + describeApiVersion());
+    }
+
+    private boolean shouldWaitForPackageReady() {
+        return frameworkApiVersion >= 101;
+    }
+
+    private void installForPackage(String pkg, ClassLoader cl, String source) {
+        if (cl == null) {
+            XposedBridge.log(TAG + ": " + s(
+                    "无法获取 ClassLoader，来源=",
+                    "Cannot get ClassLoader, source=") + source + ", package=" + pkg);
+            return;
+        }
+
+        String key = processName + "|" + pkg + "|" + System.identityHashCode(cl);
+        if (!INSTALLED.add(key)) {
+            XposedBridge.log(TAG + ": " + s(
+                    "跳过重复安装，来源=",
+                    "Skipping duplicate install, source=") + source + ", package=" + pkg);
+            return;
+        }
+
+        hookNotificationFilter(cl);
+        DndHook.install(cl);
+        XposedBridge.log(TAG + ": " + s(
+                "已通过 Modern 入口安装 Hook，来源=",
+                "Installed hooks through modern entry, source=") + source + ", package=" + pkg);
+    }
+
+    private static ClassLoader getClassLoaderCompat(XposedModuleInterface.PackageLoadedParam param) {
         try {
-            ClassLoader cl = param.getClassLoader();
-            Class<?> helper = cl.loadClass("com.xiaomi.fitness.notify.util.NotificationFilterHelper");
-            Method m = helper.getDeclaredMethod("isMipmapNotification", StatusBarNotification.class);
-try {
-    // 优先使用新版 libxposed Hook（官方 API 100）
-    hook(m, IsMipmapHooker.class);
-} catch (IllegalArgumentException e) {
-    String _msg = e.getMessage() == null ? "" : e.getMessage();
-    if (_msg.contains("Hooker should be annotated with @XposedHooker")) {
-        // 兼容：第三方旧实现仍然要求 @XposedHooker 注解，自动回退到旧版 XposedBridge Hook 方案
-        XposedBridge.log("MiHealthAmapFix: fallback → Legacy (XC_MethodHook) due to: " + _msg);
+            return param.getClassLoader();
+        } catch (Throwable ignored) {}
+        try {
+            return param.getDefaultClassLoader();
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private void hookNotificationFilter(ClassLoader cl) {
         try {
             XposedHelpers.findAndHookMethod(
                     "com.xiaomi.fitness.notify.util.NotificationFilterHelper",
                     cl,
                     "isMipmapNotification",
-                    android.service.notification.StatusBarNotification.class,
+                    StatusBarNotification.class,
                     new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) {
                             Object arg0 = param.args != null && param.args.length > 0 ? param.args[0] : null;
-                            if (arg0 instanceof android.service.notification.StatusBarNotification) {
-                                android.service.notification.StatusBarNotification sbn =
-                                        (android.service.notification.StatusBarNotification) arg0;
-                                if (sbn != null
-                                        && "com.autonavi.minimap".equals(sbn.getPackageName())
-                                        && sbn.getId() == 0x4d4 /* AMAP_NAV_ID */) {
+                            if (arg0 instanceof StatusBarNotification) {
+                                StatusBarNotification sbn = (StatusBarNotification) arg0;
+                                if (AMAP_PACKAGE.equals(sbn.getPackageName())
+                                        && sbn.getId() == AMAP_NAV_ID) {
                                     param.setResult(false);
                                 }
                             }
                         }
                     }
             );
-        } catch (Throwable t2) {
-            XposedBridge.log("MiHealthAmapFix: Legacy fallback failed: " + t2);
-        }
-    } else {
-        throw e;
-    }
-}
-
-            log("MiHealthAmapFix: hooked isMipmapNotification in " + pkg);
+            XposedBridge.log(TAG + ": " + s(
+                    "已 Hook isMipmapNotification (Modern 入口)",
+                    "Hooked isMipmapNotification (Modern entry)"));
         } catch (Throwable t) {
-            log("MiHealthAmapFix: method not found; maybe old version. " + t);
+            XposedBridge.log(TAG + ": " + s(
+                    "isMipmapNotification 未找到，可能是旧版 APP: ",
+                    "isMipmapNotification not found, maybe old app version: ") + t);
         }
     }
 
-    /** Hooker for the modern API. */
-    @XposedHooker
-        public static class IsMipmapHooker implements XposedInterface.Hooker {
-
-        // libxposed: 在 before 回调里若要短路并返回，使用 returnAndSkip(result)
-        public static void before(XposedInterface.BeforeHookCallback callback) {
-            try {
-                Object[] args = callback.getArgs();
-                if (args != null && args.length > 0 && args[0] instanceof StatusBarNotification) {
-                    StatusBarNotification sbn = (StatusBarNotification) args[0];
-                    // 仅针对高德导航这条常驻通知 (id = 0x4d4) 关闭过滤
-                    if (AMAP_PACKAGE.equals(sbn.getPackageName())
-                            && sbn.getId() == AMAP_NAV_ID) {
-                        // 让 isMipmapNotification 直接返回 false，并跳过原方法
-                        callback.returnAndSkip(false);
-                    }
-                }
-            } catch (Throwable t) {
-                // 出错不强行改结果，避免误伤其它通知
-            }
+    private int safeApiVersion() {
+        try {
+            return getApiVersion();
+        } catch (Throwable ignored) {
+            return -1;
         }
+    }
 
-        // 这里不需要 after；如果之后想兜底再翻转，也可以在 after 判断再 setResult(false)
-        public static void after(XposedInterface.AfterHookCallback callback) {
-            // no-op
+    private String describeApiVersion() {
+        return frameworkApiVersion > 0 ? String.valueOf(frameworkApiVersion) : "unknown";
+    }
+
+    private String safeFrameworkName() {
+        try {
+            String name = getFrameworkName();
+            return name == null || name.isEmpty() ? "unknown" : name;
+        } catch (Throwable ignored) {
+            return "unknown";
+        }
+    }
+
+    private long safeFrameworkVersionCode() {
+        try {
+            return getFrameworkVersionCode();
+        } catch (Throwable ignored) {
+            return -1L;
+        }
+    }
+
+    private static String safeProcessName(XposedModuleInterface.ModuleLoadedParam param) {
+        try {
+            String name = param.getProcessName();
+            return name == null || name.isEmpty() ? "unknown" : name;
+        } catch (Throwable ignored) {
+            return "unknown";
         }
     }
 }

@@ -2,16 +2,38 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.github.mihealthamapfix">
 
+    <!-- Optional: Shizuku (if present on device) -->
+    <uses-permission android:name="shizuku.permission.USE_SHIZUKU"/>
+
     <application
         android:label="MiHealth AmapFix"
         android:description="@string/module_description"
         android:allowBackup="false"
         android:supportsRtl="true">
+
         <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
         <!-- Legacy Xposed module metadata (recognized by LSPosed as well) -->
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription" android:resource="@string/module_description" />
         <meta-data android:name="xposedminversion" android:value="93" />
+
+        <!-- DND bridge service: runs outside target app, owns Shizuku/root -->
+        <service
+            android:name=".dnd.DndBridgeService"
+            android:exported="true"
+            android:enabled="true"
+            android:process=":dndbridge" />
+
+        <!-- Shizuku binder provider (runs in the same process as the bridge service) -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
+            android:process=":dndbridge" />
+
     </application>
 
 </manifest>
