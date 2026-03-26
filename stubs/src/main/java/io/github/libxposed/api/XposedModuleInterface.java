@@ -5,7 +5,6 @@ import androidx.annotation.NonNull;
 /**
  * Compile-time shim for the modern module lifecycle interface.
  */
-@SuppressWarnings("unused")
 public interface XposedModuleInterface {
 
     interface ModuleLoadedParam {

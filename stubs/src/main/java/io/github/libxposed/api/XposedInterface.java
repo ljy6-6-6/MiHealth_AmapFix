@@ -7,7 +7,6 @@ package io.github.libxposed.api;
  * only the members needed by the module while remaining source-compatible with
  * API 101 and the API 100 constructor path used by current LSPosed builds.
  */
-@SuppressWarnings("unused")
 public interface XposedInterface {
     default int getApiVersion() {
         return 0;

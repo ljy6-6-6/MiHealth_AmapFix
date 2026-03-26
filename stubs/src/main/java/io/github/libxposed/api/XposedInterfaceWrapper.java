@@ -4,7 +4,6 @@ package io.github.libxposed.api;
  * Compile-time shim for the API 101 wrapper that receives the runtime
  * framework interface through attachFramework().
  */
-@SuppressWarnings("unused")
 public class XposedInterfaceWrapper implements XposedInterface {
 
     private XposedInterface base;

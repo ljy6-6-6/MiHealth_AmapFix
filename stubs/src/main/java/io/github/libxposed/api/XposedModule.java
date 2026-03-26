@@ -7,7 +7,6 @@ package io.github.libxposed.api;
  * still instantiates modules through the two-argument constructor. Keeping both
  * here lets one source tree compile a universal module APK.
  */
-@SuppressWarnings("unused")
 public abstract class XposedModule extends XposedInterfaceWrapper implements XposedModuleInterface {
 
     public XposedModule() {}
